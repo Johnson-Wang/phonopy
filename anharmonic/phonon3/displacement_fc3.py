@@ -4,14 +4,14 @@ from phonopy.harmonic.displacement import get_least_displacements, \
 from phonopy.harmonic.dynamical_matrix import get_equivalent_smallest_vectors
 
 def direction_to_displacement(dataset,
-                              distance,
-                              supercell,
-                              cutoff_distance=None):
+                              distance=0.03,
+                              supercell=None,
+                              cutoff_pair_distance=None):
     lattice = supercell.get_cell()
     new_dataset = {}
     new_dataset['natom'] = supercell.get_number_of_atoms()
-    if cutoff_distance is not None:
-        new_dataset['cutoff_distance'] = cutoff_distance
+    if cutoff_pair_distance is not None:
+        new_dataset['cutoff_distance'] = cutoff_pair_distance
     new_first_atoms = []
     for first_atoms in dataset:
         atom1 = first_atoms['number']
@@ -22,12 +22,12 @@ def direction_to_displacement(dataset,
         for second_atom in first_atoms['second_atoms']:
             atom2 = second_atom['number']
             pair_distance = second_atom['distance']
-            included = (pair_distance < cutoff_distance or
-                        cutoff_distance is None)
+            included = (cutoff_pair_distance is None or
+                        pair_distance < cutoff_pair_distance[atom1, atom2])
             for direction2 in second_atom['directions']:
                 disp_cart2 = np.dot(direction2, lattice)
                 disp_cart2 *= distance / np.linalg.norm(disp_cart2)
-                if cutoff_distance is None:
+                if cutoff_pair_distance is None:
                     new_second_atoms.append({'number': atom2,
                                              'direction': direction2,
                                              'displacement': disp_cart2,
@@ -43,7 +43,7 @@ def direction_to_displacement(dataset,
                                 'displacement': disp_cart1,
                                 'second_atoms': new_second_atoms})
     new_dataset['first_atoms'] = new_first_atoms
-    
+
     return new_dataset
 
 def get_third_order_displacements(cell,
@@ -159,7 +159,7 @@ def get_reduced_site_symmetry(site_sym, direction, symprec=1e-5):
     for rot in site_sym:
         if (abs(direction - np.dot(direction, rot.T)) < symprec).all():
             reduced_site_sym.append(rot)
-    return np.array(reduced_site_sym, dtype='intc')
+    return np.intc(reduced_site_sym)
 
 def get_bond_symmetry(site_symmetry,
                       positions,
@@ -213,7 +213,7 @@ def _get_orbits(atom_index, cell, site_symmetry, symprec=1e-5):
                     break
 
         if len(mapping) < len(site_symmetry):
-            print("Site symmetry is broken.")
+            print "Site symmetry is broken."
             raise ValueError
         else:
             orbits.append(mapping)

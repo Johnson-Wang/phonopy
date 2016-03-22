@@ -1,41 +1,8 @@
-/* Copyright (C) 2015 Atsushi Togo */
-/* All rights reserved. */
-
-/* This file is part of phonopy. */
-
-/* Redistribution and use in source and binary forms, with or without */
-/* modification, are permitted provided that the following conditions */
-/* are met: */
-
-/* * Redistributions of source code must retain the above copyright */
-/*   notice, this list of conditions and the following disclaimer. */
-
-/* * Redistributions in binary form must reproduce the above copyright */
-/*   notice, this list of conditions and the following disclaimer in */
-/*   the documentation and/or other materials provided with the */
-/*   distribution. */
-
-/* * Neither the name of the phonopy project nor the names of its */
-/*   contributors may be used to endorse or promote products derived */
-/*   from this software without specific prior written permission. */
-
-/* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS */
-/* "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT */
-/* LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS */
-/* FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE */
-/* COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, */
-/* INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, */
-/* BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; */
-/* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER */
-/* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT */
-/* LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN */
-/* ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE */
-/* POSSIBILITY OF SUCH DAMAGE. */
-
 #include <math.h>
 #include <stdlib.h>
 
-int get_dynamical_matrix_at_q(double *dynamical_matrix,
+int get_dynamical_matrix_at_q(double *dynamical_matrix_real,
+			      double *dynamical_matrix_imag,
 			      const int num_patom, 
 			      const int num_satom,
 			      const double *fc,
@@ -47,11 +14,11 @@ int get_dynamical_matrix_at_q(double *dynamical_matrix,
 			      const int *p2s_map,
 			      const double *charge_sum)
 {
-  int i, j, k, l, m, adrs, adrsT;
+  int i, j, k, l, m;
   double phase, cos_phase, sin_phase, mass_sqrt, fc_elem;
   double dm_real[3][3], dm_imag[3][3];
   
-/* #pragma omp parallel for private(j, k, l, m, adrs, phase, cos_phase, sin_phase, mass_sqrt, dm_real, dm_imag, fc_elem) */
+#pragma omp parallel for private(j, k, l, m, phase, cos_phase, sin_phase, mass_sqrt, dm_real, dm_imag, fc_elem)
   for (i = 0; i < num_patom; i++) {
     for (j = 0; j < num_patom; j++) {
       mass_sqrt = sqrt(mass[i] * mass[j]);
@@ -82,9 +49,9 @@ int get_dynamical_matrix_at_q(double *dynamical_matrix,
 	for (l = 0; l < 3; l++) {
 	  for (m = 0; m < 3; m++) {
 	    if (charge_sum) {
-	      fc_elem = (fc[p2s_map[i] * num_satom * 9 + k * 9 + l * 3 + m] +
-			 charge_sum[i * num_patom * 9 +
-				    j * 9 + l * 3 + m]) / mass_sqrt;
+	    fc_elem = (fc[p2s_map[i] * num_satom * 9 + k * 9 + l * 3 + m] +
+		       charge_sum[i * num_patom * 9 +
+				  j * 9 + l * 3 + m]) / mass_sqrt;
 	    } else {
 	      fc_elem = fc[p2s_map[i] * num_satom * 9 +
 			   k * 9 + l * 3 + m] / mass_sqrt;
@@ -97,28 +64,12 @@ int get_dynamical_matrix_at_q(double *dynamical_matrix,
       
       for (k = 0; k < 3; k++) {
 	for (l = 0; l < 3; l++) {
-	  adrs = (i * 3 + k) * num_patom * 6 + j * 6 + l * 2;
-	  dynamical_matrix[adrs] = dm_real[k][l];
-	  dynamical_matrix[adrs + 1] = dm_imag[k][l];
+	  dynamical_matrix_real[(i * 3 + k) * num_patom * 3 + j * 3 + l] += dm_real[k][l];
+	  dynamical_matrix_imag[(i * 3 + k) * num_patom * 3 + j * 3 + l] += dm_imag[k][l];
 	}
       }
     }
   }
-
-  /* Symmetrize to be a Hermitian matrix */
-  for (i = 0; i < num_patom * 3; i++) {
-    for (j = i; j < num_patom * 3; j++) {
-      adrs = i * num_patom * 6 + j * 2;
-      adrsT = j * num_patom * 6 + i * 2;
-      dynamical_matrix[adrs] += dynamical_matrix[adrsT];
-      dynamical_matrix[adrs] /= 2;
-      dynamical_matrix[adrs + 1] -= dynamical_matrix[adrsT+ 1];
-      dynamical_matrix[adrs + 1] /= 2;
-      dynamical_matrix[adrsT] = dynamical_matrix[adrs];
-      dynamical_matrix[adrsT + 1] = -dynamical_matrix[adrs + 1];
-    }
-  }
-
   return 0;
 }
 

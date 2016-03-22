@@ -52,24 +52,6 @@ directions_diag = np.array([[ 1, 0, 0 ],
                             [ 1,-1, 1 ],
                             [-1, 1, 1 ]])
 
-def direction_to_displacement(displacement_directions,
-                              distance,
-                              supercell):
-    lattice = supercell.get_cell()
-    first_atoms = []
-    for disp in displacement_directions:
-        direction = disp[1:]
-        disp_cartesian = np.dot(direction, lattice)
-        disp_cartesian *= distance / np.linalg.norm(disp_cartesian)
-        first_atoms.append({'number': disp[0],
-                            'displacement': disp_cartesian,
-                            'direction': direction})
-    displacement_dataset = {
-        'natom': supercell.get_number_of_atoms(),
-        'first_atoms': first_atoms}
-    
-    return displacement_dataset
-
 def get_least_displacements(symmetry,
                             is_plusminus='auto',
                             is_diagonal=True,
@@ -91,29 +73,29 @@ def get_least_displacements(symmetry,
         directions = directions_axis
 
     if log_level > 2:
-        print("Site point symmetry:")
+        print "Site point symmetry:"
 
     for atom_num in symmetry.get_independent_atoms():
         site_symmetry = symmetry.get_site_symmetry(atom_num)
 
         if log_level > 2:
-            print("Atom %d" % (atom_num + 1))
+            print "Atom %d" % (atom_num + 1)
             for i, rot in enumerate(site_symmetry):
-                print("----%d----" % (i + 1))
+                print "----%d----" % (i + 1)
                 for v in rot:
-                    print("%2d %2d %2d" % tuple(v))
+                    print "%2d %2d %2d" % tuple(v)
         
         for disp in get_displacement(site_symmetry,
                                      directions,
                                      is_trigonal,
                                      log_level):
             displacements.append([atom_num,
-                                  disp[0], disp[1], disp[2]])
+                                    disp[0], disp[1], disp[2]])
             if is_plusminus == 'auto':
                 if is_minus_displacement(disp, site_symmetry):
                     displacements.append([atom_num,
                                           -disp[0], -disp[1], -disp[2]])
-            elif is_plusminus is True:
+            elif is_plusminus == True:
                 displacements.append([atom_num,
                                       -disp[0], -disp[1], -disp[2]])
 
@@ -126,25 +108,24 @@ def get_displacement(site_symmetry,
     # One
     sitesym_num, disp = get_displacement_one(site_symmetry,
                                              directions)
-    if disp is not None:
+    if not disp == None:
         if log_level > 2:
-            print("Site symmetry used to expand a direction %s" % disp[0])
-            print(site_symmetry[sitesym_num])
+            print "Site symmetry used to expand a direction", disp[0]
+            print site_symmetry[sitesym_num]
         return disp
     # Two
     sitesym_num, disps = get_displacement_two(site_symmetry,
                                               directions)
-    if disps is not None:
+    if not disps == None:
         if log_level > 2:
-            print("Site symmetry used to expand directions %s %s" %
-                  (disps[0], disps[1]))
-            print(site_symmetry[sitesym_num])
+            print "Site symmetry used to expand directions", disps[0], disps[1]
+            print site_symmetry[sitesym_num]
 
         if is_trigonal:
             disps_new = [disps[0]]
             if is_trigonal_axis(site_symmetry[sitesym_num]):
                 if log_level > 2:
-                    print("Trigonal axis is found.")
+                    print "Trigonal axis is found."
                 disps_new.append(np.dot(disps[0],
                                         site_symmetry[sitesym_num].T))
                 disps_new.append(np.dot(disps_new[1],
@@ -168,7 +149,7 @@ def get_displacement_one(site_symmetry,
                 det = determinant(direction,
                                   rot_directions[i],
                                   rot_directions[j])
-                if det != 0:
+                if not det == 0:
                     return i, [direction]
     return None, None
 
@@ -184,7 +165,7 @@ def get_displacement_two(site_symmetry,
                 det = determinant(direction,
                                   rot_directions[i],
                                   second_direction)
-                if det != 0:
+                if not det == 0:
                     return i, [direction, second_direction]
     return None, None
     
@@ -216,9 +197,12 @@ def determinant(a, b, c):
 def print_displacements(symmetry,
                         directions=directions_diag):
     displacements = get_least_displacements(symmetry, directions)
-    print("Least displacements:")
-    print("Atom       Directions")
-    print("----------------------------")
+    print "Least displacements:"
+    print "Atom       Directions"
+    print "----------------------------"
     for key in displacements:
-        print("%4d  %s" % (key + 1, displacements[key]))
+        print "%4d  " % (key+1),
+        for x in displacements[key]:
+            print x,
+        print
 

@@ -33,10 +33,11 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import numpy as np
-from phonopy.structure.grid_points import get_qpoints
+from phonopy.phonon.mesh import get_qpoints
 from phonopy.phonon.thermal_properties import mode_cv
 from phonopy.gruneisen import Gruneisen
 from phonopy.units import THzToEv
+
 
 class Mesh:
     def __init__(self,
@@ -44,66 +45,31 @@ class Mesh:
                  phonon_plus,
                  phonon_minus,
                  mesh,
-                 shift=None,
-                 is_time_reversal=True,
+                 grid_shift=None,
                  is_gamma_center=False,
-                 is_mesh_symmetry=True):
-        self._phonon = phonon
-        self._mesh = np.array(mesh, dtype='intc')
+                 symprec=1e-5):
+        self._mesh = mesh
         self._factor = phonon.get_unit_conversion_factor(),
         primitive = phonon.get_primitive()
-        primitive_symmetry = phonon.get_primitive_symmetry()
         gruneisen = Gruneisen(phonon.get_dynamical_matrix(),
                               phonon_plus.get_dynamical_matrix(),
-                              phonon_minus.get_dynamical_matrix())
-        self._qpoints, self._weights = get_qpoints(
-            self._mesh,
-            np.linalg.inv(primitive.get_cell()),
-            q_mesh_shift=shift,
-            is_time_reversal=is_time_reversal,
-            is_gamma_center=is_gamma_center,
-            rotations=primitive_symmetry.get_pointgroup_operations(),
-            is_mesh_symmetry=is_mesh_symmetry)
+                              phonon_minus.get_dynamical_matrix(),
+                              primitive.get_volume(),
+                              phonon_plus.get_primitive().get_volume(),
+                              phonon_minus.get_primitive().get_volume())
+        self._qpoints, self._weights = get_qpoints(self._mesh,
+                                                   primitive,
+                                                   grid_shift,
+                                                   is_gamma_center,
+                                                   symprec=symprec)
         gruneisen.set_qpoints(self._qpoints)
         self._gamma = gruneisen.get_gruneisen()
-        self._gamma_prime = gruneisen.get_gamma_prime()
         self._eigenvalues = gruneisen.get_eigenvalues()
         self._frequencies = np.sqrt(
             abs(self._eigenvalues)) * np.sign(self._eigenvalues) * self._factor
 
-    def get_gruneisen(self):
-        return self._gamma
-
-    def get_gamma_prime(self):
-        return self._gamma_prime
-
-    def get_mesh_numbers(self):
-        return self._mesh
-        
-    def get_phonon(self):
-        return self._phonon
-
-    def get_qpoints(self):
-        return self._qpoints
-
-    def get_weights(self):
-        return self._weights
-
-    def get_eigenvalues(self):
-        return self._eigenvalues
-
-    def get_frequencies(self):
-        return self._frequencies
-
-    def get_eigenvectors(self):
-        """
-        See the detail of array shape in phonopy.phonon.mesh.
-        """
-        return self._eigenvectors
-
-
-    def write_yaml(self, filename="gruneisen.yaml"):
-        f = open(filename, 'w')
+    def write_yaml(self):
+        f = open("gruneisen.yaml", 'w')
         f.write("mesh: [ %5d, %5d, %5d ]\n" % tuple(self._mesh))
         f.write("nqpoint: %d\n" % len(self._qpoints))
         f.write("phonon:\n")
@@ -120,16 +86,6 @@ class Mesh:
                 f.write("    frequency: %15.10f\n" % freq)
             f.write("\n")
         f.close()
-
-    def write_hdf5(self, filename="gruneisen.hdf5"):
-        import h5py
-        w = h5py.File(filename, 'w')
-        w.create_dataset('mesh', data=self._mesh)
-        w.create_dataset('gruneisen', data=self._gamma)
-        w.create_dataset('weight', data=self._weights)
-        w.create_dataset('frequency', data=self._frequencies)
-        w.create_dataset('qpoint', data=self._qpoints)
-        w.close()
     
     def plot(self,
              cutoff_frequency=None,
@@ -148,7 +104,7 @@ class Mesh:
                 color = (1. / n * i, 0, 1./ n * (n - i))
                 if markersize:
                     plt.plot(freqs, g, marker,
-                             color=color, markersize=markersize)
+                                 color=color, markersize=markersize)
                 else:
                     plt.plot(freqs, g, marker, color=color)
             elif color_scheme == 'RG':
@@ -176,23 +132,9 @@ class Mesh:
         return plt      
 
 
-def get_thermodynamic_Gruneisen_parameter(gammas,
-                                          frequencies,
-                                          multiplicities,
-                                          t):
+def get_thermodynamic_Gruneisen_parameter(gammas, frequencies, t):
     if t > 0:
         cv = mode_cv(t, frequencies * THzToEv)
-        return (np.dot(multiplicities, cv * gammas).sum() /
-                np.dot(multiplicities, cv).sum())
-    else:
-        return 0.
-
-def get_thermal_expansion_coefficient(gammas,
-                                      frequencies,
-                                      multiplicities,
-                                      t):
-    if t > 0:
-        return np.dot(multiplicities,
-                      mode_cv(t, frequencies * THzToEv) * gammas).sum()
+        return np.sum(gammas * cv) / np.sum(cv)
     else:
         return 0.

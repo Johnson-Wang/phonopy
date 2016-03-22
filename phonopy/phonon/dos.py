@@ -32,112 +32,9 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import sys
 import numpy as np
 from phonopy.phonon.tetrahedron_mesh import TetrahedronMesh
 
-
-def write_total_dos(frequency_points,
-                    total_dos,
-                    comment=None):
-    fp = open('total_dos.dat', 'w')
-    if comment is not None:
-        fp.write("# %s\n" % comment)
-
-    for freq, dos in zip(frequency_points, total_dos):
-        fp.write("%20.10f%20.10f\n" % (freq, dos))
-
-def write_partial_dos(frequency_points,
-                      partial_dos,
-                      comment=None):
-    fp = open('partial_dos.dat', 'w')
-    if comment is not None:
-        fp.write("# %s\n" % comment)
-        
-    for freq, pdos in zip(frequency_points, partial_dos.T):
-        fp.write("%20.10f" % freq)
-        fp.write(("%20.10f" * len(pdos)) % tuple(pdos))
-        fp.write("\n")
-
-
-def plot_total_dos(pyplot,
-                   frequency_points,
-                   total_dos,
-                   freq_Debye=None,
-                   Debye_fit_coef=None,
-                   xlabel=None,
-                   ylabel=None,
-                   draw_grid=True,
-                   flip_xy=False):
-    if freq_Debye is not None:
-        freq_pitch = frequency_points[1] - frequency_points[0]
-        num_points = int(freq_Debye / freq_pitch)
-        freqs = np.linspace(0, freq_Debye, num_points + 1)
-
-    if flip_xy:
-        pyplot.plot(total_dos, frequency_points, 'r-')
-        if freq_Debye:
-            pyplot.plot(np.append(Debye_fit_coef * freqs**2, 0),
-                        np.append(freqs, freq_Debye), 'b-')
-    else:
-        pyplot.plot(frequency_points, total_dos, 'r-')
-        if freq_Debye:
-            pyplot.plot(np.append(freqs, freq_Debye),
-                        np.append(Debye_fit_coef * freqs**2, 0), 'b-')
-
-    if xlabel:
-        pyplot.xlabel(xlabel)
-    if ylabel:
-        pyplot.ylabel(ylabel)
-
-    pyplot.grid(draw_grid)
-
-def plot_partial_dos(pyplot,
-                     frequency_points,
-                     partial_dos,
-                     indices=None,
-                     legend=None,
-                     xlabel=None,
-                     ylabel=None,
-                     draw_grid=True,
-                     flip_xy=False):
-    plots = []
-
-    num_atom = len(partial_dos)
-
-    if indices is None:
-        indices = []
-        for i in range(num_atom):
-            indices.append([i])
-
-    for set_for_sum in indices:
-        pdos_sum = np.zeros(frequency_points.shape, dtype='double')
-        for i in set_for_sum:
-            if i > num_atom - 1:
-                print("Atom number \'%d\' is specified," % (i + 1))
-                print("but it is not allowed to be larger than the number of "
-                      "atoms.")
-                raise ValueError
-            if i < 0:
-                print("Atom number \'%d\' is specified, but it must be "
-                      "positive." % (i + 1))
-                raise ValueError
-            pdos_sum += partial_dos[i]
-        if flip_xy:
-            plots.append(pyplot.plot(pdos_sum, frequency_points))
-        else:
-            plots.append(pyplot.plot(frequency_points, pdos_sum))
-
-    if legend is not None:
-        pyplot.legend(legend)
-
-    if xlabel:
-        pyplot.xlabel(xlabel)
-    if ylabel:
-        pyplot.ylabel(ylabel)
-
-    pyplot.grid(draw_grid)
-    
 class NormalDistribution:
     def __init__(self, sigma):
         self._sigma = sigma
@@ -156,7 +53,6 @@ class CauchyDistribution:
 
 class Dos:
     def __init__(self, mesh_object, sigma=None, tetrahedron_method=False):
-        self._mesh_object = mesh_object
         self._frequencies = mesh_object.get_frequencies()
         self._weights = mesh_object.get_weights()
         if tetrahedron_method:
@@ -165,14 +61,17 @@ class Dos:
                 self._frequencies,
                 mesh_object.get_mesh_numbers(),
                 mesh_object.get_grid_address(),
-                mesh_object.get_grid_mapping_table(),
-                mesh_object.get_ir_grid_points())
+                mesh_object.get_grid_mapping_table())
         else:
             self._tetrahedron_mesh = None
-
-        self._frequency_points = None
-        self._sigma = sigma
+        self._omega_pitch = None
+        if sigma:
+            self._sigma = sigma
+        else:
+            self._sigma = (self._frequencies.max() -
+                           self._frequencies.min()) / 100
         self.set_draw_area()
+        # Default smearing 
         self.set_smearing_function('Normal')
 
     def set_smearing_function(self, function_name):
@@ -190,60 +89,59 @@ class Dos:
         self._sigma = sigma
 
     def set_draw_area(self,
-                      freq_min=None,
-                      freq_max=None,
-                      freq_pitch=None):
+                      omega_min=None,
+                      omega_max=None,
+                      omega_pitch=None):
 
-        f_min = self._frequencies.min()
-        f_max = self._frequencies.max()
-
+        if omega_pitch == None:
+            self._omega_pitch = (self._frequencies.max() -
+                                 self._frequencies.min()) / 200
+        else:
+            self._omega_pitch = omega_pitch
+        f_max, f_min = self._frequencies.max(), self._frequencies.min()
         if self._tetrahedron_mesh is not None:
             self._sigma = 0
         if self._sigma is None:
-            self._sigma = (f_max - f_min) / 100.0
-            
-        if freq_min is None:
-            f_min -= self._sigma * 10
+            self._sigma = (f_max - f_min) / 100
+        if omega_min == None:
+            self._omega_min = self._frequencies.min() - self._sigma * 10
         else:
-            f_min = freq_min
-            
-        if freq_max is None:
-            f_max += self._sigma * 10
-        else:
-            f_max = freq_max
+            self._omega_min = omega_min
 
-        if freq_pitch is None:
-            f_delta = (f_max - f_min) / 200.0
+        if omega_max == None:
+            self._omega_max = self._frequencies.max() + self._sigma * 10
         else:
-            f_delta = freq_pitch
-        self._frequency_points = np.arange(f_min, f_max + f_delta * 0.1, f_delta)
+            self._omega_max = omega_max
+        self._omegas = np.arange(self._omega_min, self._omega_max + self._omega_pitch * 0.1, self._omega_pitch)
 
 class TotalDos(Dos):
     def __init__(self, mesh_object, sigma=None, tetrahedron_method=False):
-        Dos.__init__(self,
-                     mesh_object,
-                     sigma=sigma,
-                     tetrahedron_method=tetrahedron_method)
-        self._dos = None
+        Dos.__init__(self, mesh_object, sigma, tetrahedron_method=tetrahedron_method)
         self._freq_Debye = None
-        self._Debye_fit_coef = None
 
-    def run(self):
+    def calculate(self):
         if self._tetrahedron_mesh is None:
-            self._dos = np.array([self._get_density_of_states_at_freq(f)
-                                  for f in self._frequency_points])
+            omega = self._omega_min
+            dos = []
+            while omega < self._omega_max + self._omega_pitch/10 :
+                dos.append([omega, self._get_density_of_states_at_omega(omega)])
+                omega += self._omega_pitch
+
+            dos = np.array(dos)
+            self._omegas = dos[:,0]
+            self._dos = dos[:,1]
         else:
-            self._dos = np.zeros_like(self._frequency_points)
             thm = self._tetrahedron_mesh
-            thm.set(value='I', frequency_points=self._frequency_points)
-            for i, iw in enumerate(thm):
-                self._dos += np.sum(iw * self._weights[i], axis=1)
+            thm.run_at_frequencies(value='I',
+                                   frequency_points=self._omegas)
+            iw = thm.get_integration_weights()
+            self._dos = np.sum(np.dot(iw, self._weights), axis=1)
 
     def get_dos(self):
         """
-        Return freqs and total dos
+        Return omegas and total dos
         """
-        return self._frequency_points, self._dos
+        return self._omegas, self._dos
 
     def get_Debye_frequency(self):
         return self._freq_Debye
@@ -252,179 +150,139 @@ class TotalDos(Dos):
         try:
             from scipy.optimize import curve_fit
         except ImportError:
-            print("You need to install python-scipy.")
-            sys.exit(1)
+            print "You need to install python-scipy."
+            exit(1)
 
         def Debye_dos(freq, a):
             return a * freq**2
 
-        freq_min = self._frequency_points.min()
-        freq_max = self._frequency_points.max()
+        freqs_min = self._omegas.min()
+        freqs_max = self._omegas.max()
         
         if freq_max_fit is None:
-            N_fit = len(self._frequency_points) / 4.0 # Hard coded
+            N_fit = len(self._omegas) / 4 # Hard coded
         else:
-            N_fit = int(freq_max_fit / (freq_max - freq_min) *
-                        len(self._frequency_points))
+            N_fit = int(freqs_max_fit / (freqs_max - freqs_min) *
+                        len(self._omegas.size))
         popt, pcov = curve_fit(Debye_dos,
-                               self._frequency_points[0:N_fit],
+                               self._omegas[0:N_fit],
                                self._dos[0:N_fit])
         a2 = popt[0]
         self._freq_Debye = (3 * 3 * num_atoms / a2)**(1.0 / 3)
         self._Debye_fit_coef = a2
 
-    def plot(self,
-             pyplot,
-             xlabel=None,
-             ylabel=None,
-             draw_grid=True,
-             flip_xy=False):
-        if flip_xy:
-            _xlabel = 'Density of states'
-            _ylabel = 'Frequency'
-        else:
-            _xlabel = 'Frequency'
-            _ylabel = 'Density of states'
-
-        if xlabel is not None:
-            _xlabel = xlabel
-        if ylabel is not None:
-            _ylabel = ylabel
-
-        plot_total_dos(pyplot,
-                       self._frequency_points,
-                       self._dos,
-                       freq_Debye=self._freq_Debye,
-                       Debye_fit_coef=self._Debye_fit_coef,
-                       xlabel=_xlabel,
-                       ylabel=_ylabel,
-                       draw_grid=draw_grid,
-                       flip_xy=flip_xy)
-
+    def plot_dos(self):
+        import matplotlib.pyplot as plt
+        plt.plot(self._omegas, self._dos, 'r-')
+        if self._freq_Debye:
+            num_points = int(self._freq_Debye / self._omega_pitch)
+            omegas = np.linspace(0, self._freq_Debye, num_points + 1)
+            plt.plot(np.append(omegas, self._freq_Debye),
+                     np.append(self._Debye_fit_coef * omegas**2, 0), 'b-')
+        plt.grid(True)
+        plt.xlabel('Frequency')
+        plt.ylabel('Density of states')
+        
+        return plt
+    
     def write(self):
-        if self._tetrahedron_mesh is None:
-            comment = "Sigma = %f" % self._sigma
-        else:
-            comment = "Tetrahedron method"
-            
-        write_total_dos(self._frequency_points,
-                        self._dos,
-                        comment=comment)
+        file = open('total_dos.dat', 'w')
+        file.write("# Sigma = %f\n" % self._sigma)
+        for omega, dos in zip(self._omegas, self._dos):
+            file.write("%20.10f%20.10f" % (omega, dos))
+            file.write("\n")
 
-    def _get_density_of_states_at_freq(self, f):
+    def _get_density_of_states_at_omega(self, omega):
         return np.sum(np.dot(
-            self._weights, self._smearing_function.calc(self._frequencies - f))
-            ) /  np.sum(self._weights)
+                self._weights,
+                self._smearing_function.calc(self._frequencies - omega))
+                      ) /  np.sum(self._weights)
 
 
 class PartialDos(Dos):
-    def __init__(self,
-                 mesh_object,
-                 sigma=None,
-                 tetrahedron_method=False,
-                 direction=None):
-        Dos.__init__(self,
-                     mesh_object,
-                     sigma=sigma,
-                     tetrahedron_method=tetrahedron_method)
-        self._eigenvectors = self._mesh_object.get_eigenvectors()
+    def __init__(self, mesh_object, sigma=None, tetrahedron_method=False):
+        Dos.__init__(self, mesh_object, sigma, tetrahedron_method=tetrahedron_method)
+        eigenvectors = mesh_object.get_eigenvectors()
+        self._eigenvectors2 = (np.abs(eigenvectors))**2
 
-        num_atom = self._frequencies.shape[1] // 3
-        i_x = np.arange(num_atom, dtype='int') * 3
-        i_y = np.arange(num_atom, dtype='int') * 3 + 1
-        i_z = np.arange(num_atom, dtype='int') * 3 + 2
-        if direction is not None:
-            self._direction = np.array(
-                direction, dtype='double') / np.linalg.norm(direction)
-            proj_eigvecs = self._eigenvectors[:, i_x, :] * self._direction[0]
-            proj_eigvecs += self._eigenvectors[:, i_y, :] * self._direction[1]
-            proj_eigvecs += self._eigenvectors[:, i_z, :] * self._direction[2]
-            self._eigvecs2 = np.abs(proj_eigvecs) ** 2
-        else:
-            self._direction = None
-            self._eigvecs2 = np.abs(self._eigenvectors[:, i_x, :]) ** 2
-            self._eigvecs2 += np.abs(self._eigenvectors[:, i_y, :]) ** 2
-            self._eigvecs2 += np.abs(self._eigenvectors[:, i_z, :]) ** 2
-        self._partial_dos = None
+    def get_partial_density_of_states_at_omega(self, index, amplitudes):
+        eigvec2 = self._eigenvectors2
+        return np.sum(
+            np.dot(self._weights,
+                   eigvec2[:,index,:] * amplitudes)) / np.sum(self._weights)
 
-    def run(self):
-        if self._tetrahedron_mesh is None:
-            self._run_smearing_method()
-        else:
-            self._run_tetrahedron_method()
-
-    def _run_smearing_method(self):
+    def calculate(self):
+        omega = self._omega_min
         pdos = []
-        weights = self._weights / float(np.sum(self._weights))
-        for freq in self._frequency_points:
-            amplitudes = self._smearing_function.calc(self._frequencies - freq)
-            pdos.append(self._get_partial_dos_at_freq(amplitudes, weights))
-        self._partial_dos = np.transpose(pdos)
+        omegas = []
+        while omega < self._omega_max + self._omega_pitch/10 :
+            omegas.append(omega)
+            axis_dos = []
+            amplitudes = self._smearing_function.calc(self._frequencies - omega)
+            for i in range(self._frequencies.shape[1]):
+                axis_dos.append(
+                    self.get_partial_density_of_states_at_omega(i, amplitudes))
+            omega += self._omega_pitch
+            pdos.append(axis_dos)
 
-    def _run_tetrahedron_method(self):
-        num_freqs = len(self._frequency_points)
-        num_atom = self._eigvecs2.shape[1]
-        self._partial_dos = np.zeros((num_atom, num_freqs), dtype='double')
-        thm = self._tetrahedron_mesh
-        thm.set(value='I', frequency_points=self._frequency_points)
-        for i, iw in enumerate(thm):
-            w = self._weights[i]
-            # for ib, frac in enumerate(self._eigvecs2[i].T):
-            #     for j in range(num_freqs):
-            #         self._partial_dos[:, j] += iw[j, ib] * frac * w
-            self._partial_dos += np.dot(iw * w, self._eigvecs2[i].T).T
-        
+        self._partial_dos = np.array(pdos).T
+        self._omegas = np.array(omegas)
+
     def get_partial_dos(self):
         """
-        frequency_points: Sampling frequencies
-        partial_dos: [atom_index, frequency_points_index]
+        omegas: Sampling frequencies
+        partial_dos:
+          [[elem1-freq1, elem1-freq2, ... ],
+           [elem2-freq1, elem2-freq2, ... ],
+           ... ]
+
+          where
+           elem1: atom1-x compornent
+           elem2: atom1-y compornent
+           elem3: atom1-z compornent
+           elem4: atom2-x compornent
+           ...
         """
-        return self._frequency_points, self._partial_dos
+        return self._omegas, self._partial_dos
 
-    def plot(self,
-             pyplot,
-             indices=None,
-             legend=None,
-             xlabel=None,
-             ylabel=None,
-             draw_grid=True,
-             flip_xy=False):
+    def plot_pdos(self, indices=None, legend=None):
+        import matplotlib.pyplot as plt
+        plt.grid(True)
+        plt.xlim(self._omega_min, self._omega_max)
+        plt.xlabel('Frequency')
+        plt.ylabel('Partial density of states')
+        plots = []
 
-        if flip_xy:
-            _xlabel = 'Partial density of states'
-            _ylabel = 'Frequency'
-        else:
-            _xlabel = 'Frequency'
-            _ylabel = 'Partial density of states'
+        num_atom = self._frequencies.shape[1] / 3
 
-        if xlabel is not None:
-            _xlabel = xlabel
-        if ylabel is not None:
-            _ylabel = ylabel
+        if indices == None:
+            indices = []
+            for i in range(num_atom):
+                indices.append([i])
 
-        plot_partial_dos(pyplot,
-                         self._frequency_points,
-                         self._partial_dos,
-                         indices=indices,
-                         legend=legend,
-                         xlabel=_xlabel,
-                         ylabel=_ylabel,
-                         draw_grid=draw_grid,
-                         flip_xy=flip_xy)
-    
+        for set_for_sum in indices:
+            pdos_sum = np.zeros(self._omegas.shape, dtype=float)
+            for i in set_for_sum:
+                if i > num_atom - 1 or i < 0:
+                    print "Your specified atom number is out of range."
+                    raise ValueError
+                pdos_sum += self._partial_dos[i*3:(i+1)*3].sum(axis=0)
+            plots.append(plt.plot(self._omegas, pdos_sum))
+
+        if not legend==None:
+            plt.legend(legend)
+
+        return plt
+
+
     def write(self):
-        if self._tetrahedron_mesh is None:
-            comment = "Sigma = %f" % self._sigma
-        else:
-            comment = "Tetrahedron method"
-            
-        write_partial_dos(self._frequency_points,
-                          self._partial_dos,
-                          comment=comment)
+        file = open('partial_dos.dat', 'w')
+        file.write("# Sigma = %f\n" % self._sigma)
+        num_mode = self._frequencies.shape[1]
+        for omega, pdos in zip(self._omegas, self._partial_dos.transpose()):
+            file.write("%20.10f" % omega)
+            file.write(("%20.10f" * num_mode) % tuple(pdos))
+            file.write("\n")
 
-    def _get_partial_dos_at_freq(self, amplitudes, weights):
-        num_band = self._frequencies.shape[1]
-        pdos = [(np.dot(weights, self._eigvecs2[:, i, :] * amplitudes)).sum()
-                for i in range(num_band // 3)]
-        return pdos
+
 

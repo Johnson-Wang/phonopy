@@ -7,16 +7,17 @@ class RealToReciprocal:
                  supercell,
                  primitive,
                  mesh,
-                 symprec=1e-5):
+                 symprec=1e-5,
+                 atom_triplet_cut=None):
         self._fc3 = fc3
         self._supercell = supercell
         self._primitive = primitive
         self._mesh = mesh
         self._symprec = symprec
-        
+        self._atc=atom_triplet_cut # atom_triplet cut (dtype=bool)
         num_satom = supercell.get_number_of_atoms()
-        self._p2s_map = primitive.get_primitive_to_supercell_map()
-        self._s2p_map = primitive.get_supercell_to_primitive_map()
+        self._p2s_map = np.intc(primitive.get_primitive_to_supercell_map())
+        self._s2p_map = np.intc(primitive.get_supercell_to_primitive_map())
         # Reduce supercell atom index to primitive index
         (self._smallest_vectors,
          self._multiplicity) = get_smallest_vectors(supercell,
@@ -58,6 +59,8 @@ class RealToReciprocal:
                 continue
             for k in range(num_satom):
                 if self._s2p_map[k] != self._p2s_map[pi[2]]:
+                    continue
+                if self._atc[i,j,k]:
                     continue
                 phase = self._get_phase((j, k), pi[0])
                 fc3_reciprocal += self._fc3[i, j, k] * phase

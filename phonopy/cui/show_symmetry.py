@@ -36,7 +36,7 @@ import sys
 import numpy as np
 import phonopy.structure.spglib as spg
 from phonopy.structure.symmetry import Symmetry, find_primitive, get_pointgroup
-from phonopy.structure.cells import get_primitive, print_cell, get_supercell
+from phonopy.structure.cells import Primitive, print_cell, get_supercell
 from phonopy.interface.vasp import write_vasp
 from phonopy.structure.atoms import Atoms
 
@@ -50,11 +50,10 @@ def get_symmetry_yaml(cell, symmetry, phonopy_version=None):
 
     yaml = ""
 
-    if phonopy_version is not None:
+    if not phonopy_version==None:
         yaml += "phonopy_version: %s\n" % phonopy_version
 
-    if cell.get_magnetic_moments() is None:
-        yaml += "space_group_type: " + symmetry.get_international_table() + "\n"
+    yaml += "space_group_type: " + symmetry.get_international_table() + "\n"
     yaml += "point_group_type: " + symmetry.get_pointgroup() + "\n"
     yaml += "space_group_operations:\n"
     for i, (r, t) in enumerate(zip(rotations, translations)):
@@ -78,9 +77,7 @@ def get_symmetry_yaml(cell, symmetry, phonopy_version=None):
     for i in independent_atoms:
         sitesym = symmetry.get_site_symmetry(i)
         yaml += "- atom: %d\n" % (i+1)
-
-        if cell.get_magnetic_moments() is None:
-            yaml += "  Wyckoff: %s\n" % (wyckoffs[i])
+        yaml += "  Wyckoff: %s\n" % (wyckoffs[i])
         site_pointgroup = get_pointgroup(sitesym)
         yaml += "  site_point_group: %s\n" % (site_pointgroup[0])
         yaml += "  orientation:\n"
@@ -96,20 +93,21 @@ def get_symmetry_yaml(cell, symmetry, phonopy_version=None):
     return yaml
 
 def check_symmetry(input_cell,
-                   primitive_axis=None,
+                   primitive_axis=np.eye(3, dtype=float),
                    symprec=1e-5,
                    phonopy_version=None):
-    if primitive_axis is None:
-        cell = get_primitive(input_cell, np.eye(3), symprec=symprec)
-    else:
-        cell = get_primitive(input_cell, primitive_axis, symprec=symprec)
-    symmetry = Symmetry(cell, symprec)
-    print(get_symmetry_yaml(cell, symmetry, phonopy_version))
 
-    if input_cell.get_magnetic_moments() is None:
+    cell = Primitive(input_cell,
+                     primitive_axis,
+                     symprec)
+
+    symmetry = Symmetry(cell, symprec)
+    print get_symmetry_yaml(cell, symmetry, phonopy_version),
+
+    if input_cell.get_magnetic_moments() == None:
         primitive = find_primitive(cell, symprec)
-        if primitive is not None:
-            print("# Primitive cell was found. It is written into PPOSCAR.")
+        if not primitive==None:
+            print "# Primitive cell was found. It is written into PPOSCAR."
             write_vasp('PPOSCAR', primitive)
             
             # Overwrite symmetry and cell
@@ -122,7 +120,7 @@ def check_symmetry(input_cell,
                         scaled_positions=bravais_pos,
                         cell=bravais_lattice,
                         pbc=True)
-        print("# Bravais lattice is written into BPOSCAR.")
+        print "# Bravais lattice is written into BPOSCAR."
         write_vasp('BPOSCAR', bravais)
 
 

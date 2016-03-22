@@ -33,12 +33,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import numpy as np
-try:
-    import phonopy._phonopy as phonoc
-except ImportError:
-    import sys
-    print("Phonopy C-extension has to be built properly.")
-    sys.exit(1)
+import phonopy.structure.spglib as spg
 
 parallelepiped_vertices = np.array([[0, 0, 0],
                                     [1, 0, 0],
@@ -48,86 +43,102 @@ parallelepiped_vertices = np.array([[0, 0, 0],
                                     [1, 0, 1],
                                     [0, 1, 1],
                                     [1, 1, 1]], dtype='intc', order='C')
+parallelogram_vertices = np.array([[0,0],[0,1],[1,0],[1,1]], dtype="intc", order="C")
 
-def get_neighboring_grid_points(grid_point,
-                                relative_grid_address,
-                                mesh,
-                                bz_grid_address,
-                                bz_map):
-    relative_grid_points = np.zeros(len(relative_grid_address), dtype='intc')
-    phonoc.neighboring_grid_points(relative_grid_points,
-                                grid_point,
-                                relative_grid_address,
-                                mesh,
-                                bz_grid_address,
-                                bz_map)
-    return relative_grid_points
-    
-def get_tetrahedra_relative_grid_address(microzone_lattice):
-    """
-    reciprocal_lattice:
-      column vectors of parallel piped microzone lattice
-      which can be obtained by:
-      microzone_lattice = np.linalg.inv(bulk.get_cell()) / mesh
-    """
-    
-    relative_grid_address = np.zeros((24, 4, 3), dtype='intc')
-    phonoc.tetrahedra_relative_grid_address(
-        relative_grid_address,
-        np.array(microzone_lattice, dtype='double', order='C'))
-    
-    return relative_grid_address
-
-def get_all_tetrahedra_relative_grid_address():
-    relative_grid_address = np.zeros((4, 24, 4, 3), dtype='intc')
-    phonoc.all_tetrahedra_relative_grid_address(relative_grid_address)
-    
-    return relative_grid_address
-    
-def get_tetrahedra_integration_weight(omegas,
-                                      tetrahedra_omegas,
-                                      function='I'):
-    if isinstance(omegas, float):
-        return phonoc.tetrahedra_integration_weight(
-            omegas,
-            np.array(tetrahedra_omegas, dtype='double', order='C'),
-            function)
-    else:
-        integration_weights = np.zeros(len(omegas), dtype='double')
-        phonoc.tetrahedra_integration_weight_at_omegas(
-            integration_weights,
-            np.array(omegas, dtype='double'),
-            np.array(tetrahedra_omegas, dtype='double', order='C'),
-            function)
-        return integration_weights
-
-class TetrahedronMethod:
+class TriagonalMethod:
     def __init__(self,
-                 primitive_vectors=None, # column vectors
-                 mesh=None,
-                 lang='C'):
-        if mesh is None:
-            mesh = [1, 1, 1]
-        if primitive_vectors is None:
-            self._primitive_vectors = None
-        else:
-            self._primitive_vectors = np.array(
-                primitive_vectors, dtype='double', order='C') / mesh
-        self._lang = lang
-
+                 primitive_vectors,
+                 mesh=[1, 1,1]):
+        self._mesh = np.array(mesh)
+        assert np.count_nonzero(self._mesh>1) == 2
+        self._primitive_vectors = np.array(
+            primitive_vectors, dtype='double', order='C') / mesh # column vectors
         self._vertices = None
         self._relative_grid_addresses = None
         self._central_indices = None
         self._tetrahedra_omegas = None
         self._sort_indices = None
         self._omegas = None
+        self._create_triagonal() # cleave the parallelepiped lattices into 6 individual tetrahedrons
+        self._set_relative_grid_addresses()
+
+        self._integration_weight = None
+
+    def get_triagonal(self):
+        return self._relative_grid_addresses
+
+    def _create_triagonal(self):
+        # 2--------------3
+        # |              |
+        # |              |
+        # |              |
+        # |              |
+        # |              |
+        # |              |
+        # 0--------------1
+        #
+        # i: vec        neighbours
+        # 0: O          1, 2
+        # 1: a          0, 3
+        # 2: b          0, 3
+        # 3: a + b      1, 2
+        a, b = self._primitive_vectors.T[np.where(self._mesh>1)]
+        diag_vecs = np.array([ a + b,  # 0-3
+                               a - b]) # 1-2
+        shortest_index = np.argmin(np.sum(diag_vecs ** 2, axis=1))
+        # vertices = [np.zeros(3), a, b, a + b, c, c + a, c + b, c + a + b]
+        if shortest_index == 0:
+            triag = np.sort([[0, 3, x] for x in (1,2)])
+        elif shortest_index == 1:
+            triag = np.sort([[1, 2, x] for x in (0,3)])
+        else:
+            assert False
+        self._vertices = triag
+
+    def _set_relative_grid_addresses(self):
+        relative_grid_addresses = np.zeros((6, 3, 2), dtype='intc')
+        central_indices = np.zeros(6, dtype='intc') # 6 corresponds to all the vertices in the 2 triagonals
+        pos = 0
+        for i in range(4):
+            ppd_shifted = (parallelogram_vertices -
+                           parallelogram_vertices[i]) # relative position of the parallelogram to the grid i
+            for triag in self._vertices:
+                if i in triag:
+                    central_indices[pos] = np.where(triag==i)[0][0]
+                    relative_grid_addresses[pos, :, :] = ppd_shifted[triag]
+                    pos += 1
+        self._relative_grid_addresses = np.zeros((6,3,3), dtype="intc")
+        j=0
+        for i in range(3):
+            if self._mesh[i] == 1:
+                self._relative_grid_addresses[:,:,i] = 0
+            else:
+                self._relative_grid_addresses[:,:,i] = relative_grid_addresses[:,:,j]
+                j+=1
+        self._central_indices = central_indices
+
+
+class TetrahedronMethod:
+    def __init__(self,
+                 primitive_vectors,
+                 mesh=[1, 1, 1]):
+        self._primitive_vectors = np.array(
+            primitive_vectors, dtype='double', order='C') / mesh # column vectors
+        self._vertices = None
+        self._relative_grid_addresses = None
+        self._central_indices = None
+        self._tetrahedra_omegas = None
+        self._sort_indices = None
+        self._omegas = None
+        self._create_tetrahedra() # cleave the parallelepiped lattices into 6 individual tetrahedrons
         self._set_relative_grid_addresses()
         self._integration_weight = None
 
     def run(self, omegas, value='I'):
-        if self._lang == 'C':
+        try:
+            import phonopy._phonopy as phonoc
             self._run_c(omegas, value=value)
-        else:
+        except ImportError:
             self._run_py(omegas, value=value)
 
     def get_tetrahedra(self):
@@ -158,7 +169,7 @@ class TetrahedronMethod:
         return self._integration_weight
 
     def _run_c(self, omegas, value='I'):
-        self._integration_weight = get_tetrahedra_integration_weight(
+        self._integration_weight = spg.get_tetrahedra_integration_weight(
             omegas,
             self._tetrahedra_omegas,
             function=value)
@@ -169,7 +180,7 @@ class TetrahedronMethod:
         else:
             iw = np.zeros(len(omegas), dtype='double')
             for i, omega in enumerate(omegas):
-                iw[i] = self._get_integration_weight_py(omega, value=value)
+                iw = self._get_integration_weight_py(omega, value=value)
         self._integration_weight = iw
 
     def _get_integration_weight_py(self, omega, value='I'):
@@ -179,7 +190,7 @@ class TetrahedronMethod:
         else:
             IJ = self._J
             gn = self._n
-                
+
         self._sort_indices = np.argsort(self._tetrahedra_omegas, axis=1)
         sum_value = 0.0
         self._omega = omega
@@ -251,14 +262,16 @@ class TetrahedronMethod:
         self._vertices = tetras
 
     def _set_relative_grid_addresses(self):
-        if self._lang == 'C':
-            rga = get_tetrahedra_relative_grid_address(
+        try:
+            raise ImportError
+            import phonopy._phonopy as phonoc
+            rga = spg.get_tetrahedra_relative_grid_address(
                 self._primitive_vectors)
             self._relative_grid_addresses = rga
-        else:
-            self._create_tetrahedra()
+
+        except ImportError:
             relative_grid_addresses = np.zeros((24, 4, 3), dtype='intc')
-            central_indices = np.zeros(24, dtype='intc')
+            central_indices = np.zeros(24, dtype='intc') # 24 corresponds to all the vertices in the 6 tetrahedrons
             pos = 0
             for i in range(8):
                 ppd_shifted = (parallelepiped_vertices -

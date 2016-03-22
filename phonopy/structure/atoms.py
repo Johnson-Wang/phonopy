@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Copyright (C) 2011 Atsushi Togo
 # All rights reserved.
 #
@@ -50,87 +49,82 @@ class Atoms:
                  pbc=None):
 
         # cell
-        self.cell = None
-        if cell is not None:
-            self.cell = np.array(cell, dtype='double', order='C')
+        if cell == None:
+            self.cell=None
+        else:
+            self.cell = np.array(cell, dtype=float)
 
         # position
         self.scaled_positions = None
-        if (not self.cell is None) and  (not positions is None):
+        if (not self.cell == None) and  (not positions == None):
             self.set_positions(positions)
-        if (not scaled_positions is None):
+        if (not scaled_positions == None):
             self.set_scaled_positions(scaled_positions)
 
         # Atom symbols
         self.symbols = symbols
 
         # Atomic numbers
-        self.numbers = None
-        if numbers is not None:
-            self.numbers = np.array(numbers, dtype='intc')
+        if numbers==None:
+            self.numbers = None
+        else:
+            self.numbers = np.array(numbers, dtype=int)
 
         # masses
-        self.masses = None
         self.set_masses(masses)
 
         # (initial) magnetic moments
-        self.magmoms = None
         self.set_magnetic_moments(magmoms)
 
         # number --> symbol
-        if not self.numbers is None:
-            self._numbers_to_symbols()
+        if not self.numbers == None:
+            self.numbers_to_symbols()
 
         # symbol --> number
-        elif self.symbols is not None:
-            self._symbols_to_numbers()
+        elif not self.symbols == None:
+            self.symbols_to_numbers()
 
         # symbol --> mass
-        if self.symbols and (self.masses is None):
-            self._symbols_to_masses()
+        if self.symbols and (self.masses == None):
+            self.symbols_to_masses()
 
 
     def set_cell(self, cell):
-        self.cell = np.array(cell, dtype='double', order='C')
+        self.cell = np.array(cell, dtype=float)
 
     def get_cell(self):
         return self.cell.copy()
 
     def set_positions(self, cart_positions):
-        self.scaled_positions = np.array(
-            np.dot(cart_positions, np.linalg.inv(self.cell)),
-            dtype='double', order='C')
+        self.scaled_positions = np.dot(cart_positions,
+                                        np.linalg.inv(self.cell))
 
     def get_positions(self):
         return np.dot(self.scaled_positions, self.cell)
 
     def set_scaled_positions(self, scaled_positions):
-        self.scaled_positions = np.array(scaled_positions,
-                                         dtype='double', order='C')
+        self.scaled_positions = np.array(scaled_positions, dtype=float)
 
     def get_scaled_positions(self):
         return self.scaled_positions.copy()
 
     def set_masses(self, masses):
-        if masses is None:
+        if masses == None:
             self.masses = None
         else:
-            self.masses = np.array(masses, dtype='double')
+            self.masses = np.array(masses, dtype=float)
 
     def get_masses(self):
-        if self.masses is None:
-            return None
-        else:
-            return self.masses.copy()
+        return self.masses.copy()
 
     def set_magnetic_moments(self, magmoms):
-        if magmoms is None:
+        if magmoms == None:
             self.magmoms = None
         else:
-            self.magmoms = np.array(magmoms, dtype='double')
+            self.magmoms = np.array(magmoms, dtype=float)
 
     def get_magnetic_moments(self):
-        if self.magmoms is None:
+        if self.magmoms == None:
             return None
         else:
             return self.magmoms.copy()
@@ -147,74 +141,22 @@ class Atoms:
     def get_atomic_numbers(self):
         return self.numbers.copy()
 
+    def numbers_to_symbols(self):
+        self.symbols = [atom_data[n][1] for n in self.numbers]
+        
+    def symbols_to_numbers(self):
+        self.numbers = np.array([symbol_map[s]
+                                 for s in self.symbols])
+        
+    def symbols_to_masses(self):
+        self.masses = np.array([atom_data[symbol_map[s]][3]
+                                for s in self.symbols])
+
     def get_volume(self):
         return np.linalg.det(self.cell)
 
-    def copy(self):
-        return Atoms(cell=self.cell,
-                     scaled_positions=self.scaled_positions,
-                     masses=self.masses,
-                     magmoms=self.magmoms,
-                     symbols=self.symbols,
-                     pbc=True)
-        
-    def _numbers_to_symbols(self):
-        self.symbols = [atom_data[n][1] for n in self.numbers]
-        
-    def _symbols_to_numbers(self):
-        self.numbers = np.array(
-            [symbol_map[s] for s in self.symbols], dtype='intc')
-        
-    def _symbols_to_masses(self):
-        masses = [atom_data[symbol_map[s]][3] for s in self.symbols]
-        if None in masses:
-            self.masses = None
-        else:
-            self.masses = np.array(masses, dtype='double')
-
-class PhonopyAtoms(Atoms):
-    def __init__(self,
-                 symbols=None,
-                 numbers=None, 
-                 masses=None,
-                 magmoms=None,
-                 scaled_positions=None,
-                 cell=None,
-                 atoms=None):
-        if atoms:
-            Atoms.__init__(self,
-                           numbers=atoms.get_atomic_numbers(),
-                           masses=atoms.get_masses(),
-                           magmoms=atoms.get_magnetic_moments(),
-                           scaled_positions=atoms.get_scaled_positions(),
-                           cell=atoms.get_cell(),
-                           pbc=True)
-        else:
-            Atoms.__init__(self,
-                           symbols=symbols,
-                           numbers=numbers,
-                           masses=masses,
-                           magmoms=magmoms,
-                           scaled_positions=scaled_positions,
-                           cell=cell,
-                           pbc=True)
-
-    def __str__(self):
-        lines = []
-        lines.append("lattice:")
-        for v, a in zip(self.cell, ('a', 'b', 'c')):
-            lines.append("- [ %22.16f, %22.16f, %22.16f ] # %s" %
-                         (v[0], v[1], v[2], a))
-        lines.append("atoms:")
-        for i, (s, v, m) in enumerate(
-                zip(self.symbols, self.scaled_positions, self.masses)):
-            lines.append("- symbol: %-2s # %d" % (s, i + 1))
-            lines.append("  position: [ %19.16f, %19.16f, %19.16f ]" % tuple(v))
-            lines.append("  mass: %f" % m)
-        return "\n".join(lines)
-
 atom_data = [ 
-    [  0, "X", "X", None], # 0
+    [  0, "X", "X", 0], # 0
     [  1, "H", "Hydrogen", 1.00794], # 1
     [  2, "He", "Helium", 4.002602], # 2
     [  3, "Li", "Lithium", 6.941], # 3
@@ -257,7 +199,7 @@ atom_data = [
     [ 40, "Zr", "Zirconium", 91.224], # 40
     [ 41, "Nb", "Niobium", 92.90638], # 41
     [ 42, "Mo", "Molybdenum", 95.96], # 42
-    [ 43, "Tc", "Technetium", None], # 43
+    [ 43, "Tc", "Technetium", 0], # 43
     [ 44, "Ru", "Ruthenium", 101.07], # 44
     [ 45, "Rh", "Rhodium", 102.90550], # 45
     [ 46, "Pd", "Palladium", 106.42], # 46
@@ -275,7 +217,7 @@ atom_data = [
     [ 58, "Ce", "Cerium", 140.116], # 58
     [ 59, "Pr", "Praseodymium", 140.90765], # 59
     [ 60, "Nd", "Neodymium", 144.242], # 60
-    [ 61, "Pm", "Promethium", None], # 61
+    [ 61, "Pm", "Promethium", 0], # 61
     [ 62, "Sm", "Samarium", 150.36], # 62
     [ 63, "Eu", "Europium", 151.964], # 63
     [ 64, "Gd", "Gadolinium", 157.25], # 64
@@ -298,41 +240,41 @@ atom_data = [
     [ 81, "Tl", "Thallium", 204.3833], # 81
     [ 82, "Pb", "Lead", 207.2], # 82
     [ 83, "Bi", "Bismuth", 208.98040], # 83
-    [ 84, "Po", "Polonium", None], # 84
-    [ 85, "At", "Astatine", None], # 85
-    [ 86, "Rn", "Radon", None], # 86
-    [ 87, "Fr", "Francium", None], # 87
-    [ 88, "Ra", "Radium", None], # 88
-    [ 89, "Ac", "Actinium", None], # 89
+    [ 84, "Po", "Polonium", 0], # 84
+    [ 85, "At", "Astatine", 0], # 85
+    [ 86, "Rn", "Radon", 0], # 86
+    [ 87, "Fr", "Francium", 0], # 87
+    [ 88, "Ra", "Radium", 0], # 88
+    [ 89, "Ac", "Actinium", 0], # 89
     [ 90, "Th", "Thorium", 232.03806], # 90
     [ 91, "Pa", "Protactinium", 231.03588], # 91
     [ 92, "U", "Uranium", 238.02891], # 92
-    [ 93, "Np", "Neptunium", None], # 93
-    [ 94, "Pu", "Plutonium", None], # 94
-    [ 95, "Am", "Americium", None], # 95
-    [ 96, "Cm", "Curium", None], # 96
-    [ 97, "Bk", "Berkelium", None], # 97
-    [ 98, "Cf", "Californium", None], # 98
-    [ 99, "Es", "Einsteinium", None], # 99
-    [100, "Fm", "Fermium", None], # 100
-    [101, "Md", "Mendelevium", None], # 101
-    [102, "No", "Nobelium", None], # 102
-    [103, "Lr", "Lawrencium", None], # 103
-    [104, "Rf", "Rutherfordium", None], # 104
-    [105, "Db", "Dubnium", None], # 105
-    [106, "Sg", "Seaborgium", None], # 106
-    [107, "Bh", "Bohrium", None], # 107
-    [108, "Hs", "Hassium", None], # 108
-    [109, "Mt", "Meitnerium", None], # 109
-    [110, "Ds", "Darmstadtium", None], # 110
-    [111, "Rg", "Roentgenium", None], # 111
-    [112, "Cn", "Copernicium", None], # 112
-    [113, "Uut", "Ununtrium", None], # 113
-    [114, "Uuq", "Ununquadium", None], # 114
-    [115, "Uup", "Ununpentium", None], # 115
-    [116, "Uuh", "Ununhexium", None], # 116
-    [117, "Uus", "Ununseptium", None], # 117
-    [118, "Uuo", "Ununoctium", None], # 118
+    [ 93, "Np", "Neptunium", 0], # 93
+    [ 94, "Pu", "Plutonium", 0], # 94
+    [ 95, "Am", "Americium", 0], # 95
+    [ 96, "Cm", "Curium", 0], # 96
+    [ 97, "Bk", "Berkelium", 0], # 97
+    [ 98, "Cf", "Californium", 0], # 98
+    [ 99, "Es", "Einsteinium", 0], # 99
+    [100, "Fm", "Fermium", 0], # 100
+    [101, "Md", "Mendelevium", 0], # 101
+    [102, "No", "Nobelium", 0], # 102
+    [103, "Lr", "Lawrencium", 0], # 103
+    [104, "Rf", "Rutherfordium", 0], # 104
+    [105, "Db", "Dubnium", 0], # 105
+    [106, "Sg", "Seaborgium", 0], # 106
+    [107, "Bh", "Bohrium", 0], # 107
+    [108, "Hs", "Hassium", 0], # 108
+    [109, "Mt", "Meitnerium", 0], # 109
+    [110, "Ds", "Darmstadtium", 0], # 110
+    [111, "Rg", "Roentgenium", 0], # 111
+    [112, "Cn", "Copernicium", 0], # 112
+    [113, "Uut", "Ununtrium", 0], # 113
+    [114, "Uuq", "Ununquadium", 0], # 114
+    [115, "Uup", "Ununpentium", 0], # 115
+    [116, "Uuh", "Ununhexium", 0], # 116
+    [117, "Uus", "Ununseptium", 0], # 117
+    [118, "Uuo", "Ununoctium", 0], # 118
     ]
 
 symbol_map = {
@@ -457,7 +399,7 @@ symbol_map = {
     }
 
 # This data are obtained from
-# J. R. de Laeter, J. K. Böhlke, P. De Bièvre, H. Hidaka, H. S. Peiser,
+# J. R. de Laeter, J. K. Bhlke, P. De Bivre, H. Hidaka, H. S. Peiser
 # K. J. R. Rosman and P. D. P. Taylor (2003).
 # "Atomic weights of the elements. Review 2000 (IUPAC Technical Report)"
 isotope_data = {
@@ -592,7 +534,7 @@ isotope_data = {
            [162, 161.926795, 0.25475], [163, 162.928728, 0.24896],
            [164, 163.929171, 0.28260]],
     'Ho': [[165, 164.930319, 1.0000]],
-    'Er': [[162, 161.928775, 0.00139], [164, 163.929197, 0.01601],
+    'Eu': [[162, 161.928775, 0.00139], [164, 163.929197, 0.01601],
            [166, 165.930290, 0.33503], [167, 166.932046, 0.22869],
            [168, 167.932368, 0.26978], [170, 169.935461, 0.14910]],
     'Tm': [[169, 168.934211, 1.0000]],

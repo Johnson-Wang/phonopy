@@ -34,14 +34,24 @@
 
 import numpy as np
 from phonopy.units import VaspToTHz
-from phonopy.structure.atoms import PhonopyAtoms
+from phonopy.phonon.irreps import IrReps
 
-def estimate_band_connection(prev_eigvecs, eigvecs, prev_band_order):
+def is_sequence(a,b, diff=0.49):
+    if (np.abs(np.real(a-b))<diff).all() and (np.abs(np.imag(a-b))<diff).all():
+        return True
+    else:
+        return False
+
+def estimate_band_connection(prev_eigvecs, eigvecs, prev_band_order,degenerate_sets=None):
+    if degenerate_sets == None:
+        degenerate_sets=[[i] for i in range(len(prev_band_order))]
     metric = np.abs(np.dot(prev_eigvecs.conjugate().T, eigvecs))
     connection_order = []
+    indices = range(len(metric))
+    indices.reverse()
     for overlaps in metric:
         maxval = 0
-        for i in reversed(range(len(metric))):
+        for i in indices:
             val = overlaps[i]
             if i in connection_order:
                 continue
@@ -50,38 +60,79 @@ def estimate_band_connection(prev_eigvecs, eigvecs, prev_band_order):
                 maxindex = i
         connection_order.append(maxindex)
 
-    band_order = [connection_order[x] for x in prev_band_order]
-        
+    band_order = np.array([connection_order[x] for x in prev_band_order], dtype=int)
+    for j, deg in enumerate(degenerate_sets):
+        band_deg = band_order[deg]
+        band_order[deg]=sorted(band_deg)
     return band_order
 
+def esitimate_band_connection_irreps(characters_prev,
+                                     characters,
+                                     band_order,
+                                     degenerate_sets):
+    done=[]
+    if characters.shape == characters_prev.shape:
+        new_band_order=band_order.copy()
+        for i,c in enumerate(characters_prev):
+            pos=pos_in_current(c, characters,done)
+            done.append(pos)
+            for d,p in zip(degenerate_sets[i], degenerate_sets[pos]):
+                new_band_order[np.where(band_order==d)]=p
+        return new_band_order
+    else:
+        return band_order
+
+def pos_in_current(c, characters,done):
+    find =False
+    for i, c_current in enumerate(characters):
+        if is_sequence(c, c_current):
+            if i not in done:
+                find=True
+                break
+    assert find ==True
+    return i
+
+
+def get_degenerate_sets(freqs, degeneracy_tolerance=1e-5):
+    degenerates = []
+    indices_done = []
+    for i, f1 in enumerate(freqs):
+        if i in indices_done:
+            continue
+        deg_set = []
+        for j, f2 in enumerate(freqs):
+            if abs(f2 - f1) < degeneracy_tolerance:
+                deg_set.append(j)
+                indices_done.append(j)
+        degenerates.append(deg_set)
+    return degenerates
 
 class BandStructure:
     def __init__(self,
                  paths,
                  dynamical_matrix,
+                 cell,
                  is_eigenvectors=False,
                  is_band_connection=False,
                  group_velocity=None,
                  factor=VaspToTHz,
                  verbose=False):
         self._dynamical_matrix = dynamical_matrix
-        self._cell = dynamical_matrix.get_primitive()
-        self._supercell = dynamical_matrix.get_supercell()
+        self._cell = cell
         self._factor = factor
         self._is_eigenvectors = is_eigenvectors
         self._is_band_connection = is_band_connection
         if is_band_connection:
             self._is_eigenvectors = True
         self._group_velocity = group_velocity
-            
+        self._band_order=np.arange(3*len(dynamical_matrix._p2s_map))
         self._paths = [np.array(path) for path in paths]
         self._distances = []
         self._distance = 0.
-        self._special_points = [0.]
+        self._special_point = [0.]
         self._eigenvalues = None
         self._eigenvectors = None
         self._frequencies = None
-        self._group_velocities = None
         self._set_band(verbose=verbose)
 
     def get_distances(self):
@@ -105,118 +156,67 @@ class BandStructure:
     def get_unit_conversion_factor(self):
         return self._factor
     
-    def plot(self, pyplot, labels=None):
-        for distances, frequencies in zip(self._distances,
-                                          self._frequencies):
-            for freqs in frequencies.T:
-                if self._is_band_connection:
-                    pyplot.plot(distances, freqs, '-')
-                else:
-                    pyplot.plot(distances, freqs, 'r-')
-
-        pyplot.ylabel('Frequency')
-        pyplot.xlabel('Wave vector')
-        if labels and len(labels) == len(self._special_points):
-            pyplot.xticks(self._special_points, labels)
+    def plot_band(self, symbols=None):
+        import matplotlib.pyplot as plt
+        if symbols:
+            from matplotlib import rc
+            rc('text', usetex=True)
+        distances=np.array(sum(np.array(self._distances).tolist(), []))
+        frequencies=np.array(sum(np.array(self._frequencies).tolist(), []))
+        if self._is_band_connection:
+            plt.plot(distances, frequencies, '-')
         else:
-            pyplot.xticks(self._special_points,
-                          [''] * len(self._special_points))
-        pyplot.xlim(0, self._distance)
-        pyplot.axhline(y=0, linestyle=':', linewidth=0.5, color='b')
+            plt.plot(distances, frequencies,'r-')
 
-    def write_yaml(self, labels=None, filename="band.yaml"):
-        with open(filename, 'w') as w:
-            natom = self._cell.get_number_of_atoms()
-            rec_lattice = np.linalg.inv(self._cell.get_cell()) # column vectors
-            smat = self._supercell.get_supercell_matrix()
-            pmat = self._cell.get_primitive_matrix()
-            tmat = np.rint(np.dot(np.linalg.inv(pmat), smat)).astype(int)
-            nq_paths = []
-            for qpoints in self._paths:
-                nq_paths.append(len(qpoints))
-            text = []
-            text.append("nqpoint: %-7d" % np.sum(nq_paths))
-            text.append("npath: %-7d" % len(self._paths))
-            text.append("segment_nqpoint:")
-            text += ["- %d" % nq for nq in nq_paths]                
-            text.append("reciprocal_lattice:")
-            for vec, axis in zip(rec_lattice.T, ('a*', 'b*', 'c*')):
-                text.append("- [ %12.8f, %12.8f, %12.8f ] # %2s" %
-                            (tuple(vec) + (axis,)))
-            text.append("natom: %-7d" % (natom))
-            text.append(str(PhonopyAtoms(atoms=self._cell)))
-            text.append("supercell_matrix:")
-            for v in tmat:
-                text.append("- [ %4d, %4d, %4d ]" % tuple(v))
-            text.append('')
-            text.append("phonon:")
-            text.append('')
-            w.write("\n".join(text))
+        plt.ylabel('Frequency')
+        plt.xlabel('Wave vector')
+        if symbols and len(symbols)==len(self._special_point):
+            plt.xticks(self._special_point, symbols)
+        else:
+            plt.xticks(self._special_point, [''] * len(self._special_point))
+        plt.xlim(0, self._distance)
+        plt.axhline(y=0, linestyle=':', linewidth=0.5, color='b')
+        return plt
 
-            for i in range(len(self._paths)):
-                qpoints = self._paths[i]
-                distances = self._distances[i]
-                frequencies = self._frequencies[i]
-                if self._group_velocities is None:
-                    group_velocities = None
-                else:
-                    group_velocities = self._group_velocities[i]
-                if self._eigenvectors is None:
-                    eigenvectors = None
-                else:
-                    eigenvectors = self._eigenvectors[i]
-                _labels = None
-                if labels is not None:
-                    if len(labels) == len(self._paths) + 1:
-                        _labels = (labels[i], labels[i + 1])
-
-                w.write("\n".join(self._get_q_segment_yaml(qpoints,
-                                                           distances,
-                                                           frequencies,
-                                                           eigenvectors,
-                                                           group_velocities,
-                                                           _labels)))
-
-    def _get_q_segment_yaml(self,
-                            qpoints,
-                            distances,
-                            frequencies,
-                            eigenvectors,
-                            group_velocities,
-                            labels):
+    def write_yaml(self):
+        f = open('band.yaml', 'w')
         natom = self._cell.get_number_of_atoms()
-        text = []
-        for j in range(len(qpoints)):
-            q = qpoints[j]
-            text.append("- q-position: [ %12.7f, %12.7f, %12.7f ]" % tuple(q))
-            text.append("  distance: %12.7f" % distances[j])
-            if labels is not None:
-                if j == 0:
-                    text.append("  label: \'%s\'" % labels[0])
-                elif j == len(qpoints) - 1:
-                    text.append("  label: \'%s\'" % labels[1])
-            text.append("  band:")
-            for k, freq in enumerate(frequencies[j]):
-                text.append("  - # %d" % (k + 1))
-                text.append("    frequency: %15.10f" % freq)
-
-                if group_velocities is not None:
-                    gv = group_velocities[j, k]
-                    text.append("    group_velocity: "
-                                "[ %13.7f, %13.7f, %13.7f ]" % tuple(gv))
-
-                if eigenvectors is not None:
-                    text.append("    eigenvector:")
-                    for l in range(natom):
-                        text.append("    - # atom %d" % (l + 1))
-                        for m in (0, 1, 2):
-                            text.append("      - [ %17.14f, %17.14f ]" %
+        nqpoint = 0
+        for qpoints in self._paths:
+            nqpoint += len(qpoints)
+        f.write("nqpoint: %-7d\n" % nqpoint)
+        f.write("npath: %-7d\n" % len(self._paths))
+        f.write("natom: %-7d\n" % (natom))
+        f.write("phonon:\n")
+        for i, (qpoints, distances, frequencies) in enumerate(zip(
+            self._paths,
+            self._distances,
+            self._frequencies)):
+             for j, q in enumerate(qpoints):
+                f.write("- q-position: [ %12.7f, %12.7f, %12.7f ]\n" % tuple(q))
+                f.write("  distance: %12.7f\n" % distances[j])
+                f.write("  band:\n")
+                for k, freq in enumerate(frequencies[j]):
+                    f.write("  - # %d\n" % (k + 1))
+                    f.write("    frequency: %15.10f\n" % freq)
+    
+                    if self._group_velocity is not None:
+                        gv = self._group_velocities[i][j, k]
+                        f.write("    group_velocity: ")
+                        f.write("[ %13.7f, %13.7f, %13.7f ]\n" % tuple(gv))
+                        
+                    if self._is_eigenvectors:
+                        eigenvectors = self._eigenvectors[i]
+                        f.write("    eigenvector:\n")
+                        for l in range(natom):
+                            f.write("    - # atom %d\n" % (l + 1))
+                            for m in (0, 1, 2):
+                                f.write("      - [ %17.14f, %17.14f ]\n" %
                                         (eigenvectors[j, l * 3 + m, k].real,
                                          eigenvectors[j, l * 3 + m, k].imag))
-            text.append('')
-        text.append('')
 
-        return text
+                        
+                f.write("\n")
 
     def _set_initial_point(self, qpoint):
         self._lastq = qpoint.copy()
@@ -237,10 +237,18 @@ class BandStructure:
         for path in self._paths:
             self._set_initial_point(path[0])
 
+            q_direction = None # used for NAC only
+            if is_nac:
+                # One of end points has to be Gamma point.
+                if (np.linalg.norm(path[0]) < 0.0001 or 
+                    np.linalg.norm(path[-1]) < 0.0001):
+                    q_direction = path[0] - path[-1]
+            
             (distances_on_path,
              eigvals_on_path,
              eigvecs_on_path,
              gv_on_path) = self._solve_dm_on_path(path,
+                                                  q_direction,
                                                   verbose)
 
             eigvals.append(np.array(eigvals_on_path))
@@ -249,7 +257,7 @@ class BandStructure:
             if self._group_velocity is not None:
                 group_velocities.append(np.array(gv_on_path))
             distances.append(np.array(distances_on_path))
-            self._special_points.append(self._distance)
+            self._special_point.append(self._distance)
 
         self._eigenvalues = eigvals
         if self._is_eigenvectors:
@@ -260,7 +268,7 @@ class BandStructure:
         
         self._set_frequencies()
 
-    def _solve_dm_on_path(self, path, verbose):
+    def _solve_dm_on_path(self, path, q_direction, verbose):
         is_nac = self._dynamical_matrix.is_nac()
         distances_on_path = []
         eigvals_on_path = []
@@ -270,15 +278,12 @@ class BandStructure:
         if self._group_velocity is not None:
             self._group_velocity.set_q_points(path)
             gv = self._group_velocity.get_group_velocity()
-        
+        band_order = []
         for i, q in enumerate(path):
             self._shift_point(q)
             distances_on_path.append(self._distance)
             
             if is_nac:
-                q_direction = None
-                if (np.abs(q) < 0.0001).all(): # For Gamma point
-                    q_direction = path[0] - path[-1]
                 self._dynamical_matrix.set_dynamical_matrix(
                     q, q_direction=q_direction, verbose=verbose)
             else:
@@ -293,25 +298,41 @@ class BandStructure:
                 eigvals = np.linalg.eigvalsh(dm).real
 
             if self._is_band_connection:
-                if i == 0:
-                    band_order = range(len(eigvals))
-                else:
-                    band_order = estimate_band_connection(prev_eigvecs,
-                                                          eigvecs,
-                                                          band_order)
-                eigvals_on_path.append(eigvals[band_order])
-                eigvecs_on_path.append((eigvecs.T)[band_order].T)
 
+                if i == 0:
+                    eigvals_0=eigvals
+                else:
+                    if i==1:
+                        degenerate_sets=get_degenerate_sets(freqs=eigvals_0,degeneracy_tolerance=1e-10)
+                    else:
+                        degenerate_sets=get_degenerate_sets(freqs=eigvals,degeneracy_tolerance=1e-10)
+                    self._band_order = estimate_band_connection(prev_eigvecs,
+                                                          eigvecs,
+                                                          self._band_order,
+                                                          degenerate_sets)
+                prev_eigvecs=eigvecs
+
+            # if self._is_band_connection:
+            #     irreps=IrReps(self._dynamical_matrix, q)
+            #     irreps.run()
+            #     characters=irreps.get_characters().round(8)
+            #     if i>0:
+            #         self._band_order=esitimate_band_connection_irreps(characters_prev,
+            #                                                           characters,
+            #                                                           self._band_order,
+            #                                                           irreps._get_degenerate_sets())
+            #     characters_prev=characters
+                eigvals_on_path.append(eigvals[self._band_order])
+                eigvecs_on_path.append((eigvecs.T)[self._band_order].T)
                 if self._group_velocity is not None:
-                    gv_on_path.append(gv[i][band_order])
-                prev_eigvecs = eigvecs
+                    gv_on_path.append(gv[i][self._band_order])
             else:
                 eigvals_on_path.append(eigvals)
                 if self._is_eigenvectors:
                     eigvecs_on_path.append(eigvecs)
                 if self._group_velocity is not None:
                     gv_on_path.append(gv[i])
-
+            band_order.append(self._band_order)
         return distances_on_path, eigvals_on_path, eigvecs_on_path, gv_on_path
 
     def _set_frequencies(self):
@@ -319,4 +340,9 @@ class BandStructure:
         for eigs_path in self._eigenvalues:
             frequencies.append(np.sqrt(abs(eigs_path)) * np.sign(eigs_path)
                                * self._factor)
+            ## This expression may not be supported in old python versions.
+            # freqs_on_path = []
+            # for eigs in eigs_path:
+            #     freqs = [np.sqrt(x) if x > 0 else -np.sqrt(-x) for x in eigs])
+            # frequencies.append(np.array(freqs_on_path) * self._factor)
         self._frequencies = frequencies

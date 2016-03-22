@@ -1,62 +1,10 @@
 import sys
 import numpy as np
 from phonopy.harmonic.dynamical_matrix import DynamicalMatrix, DynamicalMatrixNAC, get_smallest_vectors
-from phonopy.structure.cells import get_supercell
+from phonopy.structure.cells import get_supercell, Primitive, print_cell
 from anharmonic.file_IO import write_fc3_dat, write_fc2_dat
 from phonopy.units import VaspToTHz
-from phonopy.structure.grid_points import get_qpoints
-
-def get_gruneisen_parameters(fc2,
-                             fc3,
-                             supercell,
-                             primitive,
-                             band_paths,
-                             mesh,
-                             qpoints,
-                             nac_params=None,
-                             nac_q_direction=None,
-                             ion_clamped=False,
-                             factor=None,
-                             symprec=1e-5,
-                             output_filename=None,
-                             log_level=True):
-    if log_level:
-        print("-" * 23 + " Phonon Gruneisen parameter " + "-" * 23)
-        if mesh is not None:
-            print("Mesh sampling: [ %d %d %d ]" % tuple(mesh))
-        elif band_paths is not None:
-            print("Paths in reciprocal reduced coordinates:")
-            for path in band_paths:
-                print("[%5.2f %5.2f %5.2f] --> [%5.2f %5.2f %5.2f]" %
-                      (tuple(path[0]) + tuple(path[-1])))
-        if ion_clamped:
-            print("To be calculated with ion clamped.")
-            
-        sys.stdout.flush()
-
-    gruneisen = Gruneisen(fc2,
-                          fc3,
-                          supercell,
-                          primitive,
-                          nac_params=nac_params,
-                          nac_q_direction=nac_q_direction,
-                          ion_clamped=ion_clamped,
-                          factor=factor,
-                          symprec=symprec)
-
-    if mesh is not None:
-        gruneisen.set_sampling_mesh(mesh, is_gamma_center=True)
-    elif band_paths is not None:
-        gruneisen.set_band_structure(band_paths)
-    elif qpoints is not None:
-        gruneisen.set_qpoints(qpoints)
-    gruneisen.run()
-
-    if output_filename is None:
-        filename = 'gruneisen3.yaml'
-    else:
-        filename = 'gruneisen3.' + output_filename + '.yaml'
-    gruneisen.write_yaml(filename=filename)
+from phonopy.phonon.mesh import get_qpoints
 
 class Gruneisen:
     def __init__(self,
@@ -64,6 +12,7 @@ class Gruneisen:
                  fc3,
                  supercell,
                  primitive,
+                 supercell_extra=None,
                  nac_params=None,
                  nac_q_direction=None,
                  ion_clamped=False,
@@ -72,17 +21,21 @@ class Gruneisen:
         self._fc2 = fc2
         self._fc3 = fc3
         self._scell = supercell
+        if supercell_extra is not None:
+            self._scell_extra = supercell_extra
+        else:
+            self._scell_extra = supercell
         self._pcell = primitive
         self._ion_clamped = ion_clamped
         self._factor = factor
         self._symprec = symprec
         if nac_params is None:
-            self._dm = DynamicalMatrix(self._scell,
+            self._dm = DynamicalMatrix(self._scell_extra,
                                        self._pcell,
                                        self._fc2,
                                        symprec=self._symprec)
         else:
-            self._dm = DynamicalMatrixNAC(self._scell,
+            self._dm = DynamicalMatrixNAC(self._scell_extra,
                                           self._pcell,
                                           self._fc2,
                                           symprec=self._symprec)
@@ -90,12 +43,15 @@ class Gruneisen:
         self._nac_q_direction = nac_q_direction
         self._shortest_vectors, self._multiplicity = get_smallest_vectors(
             self._scell, self._pcell, self._symprec)
+        self._shortest_vectors_extra, self._multiplicity_extra = get_smallest_vectors(
+            self._scell_extra, self._pcell, self._symprec)
 
         if self._ion_clamped:
             num_atom_prim = self._pcell.get_number_of_atoms()
             self._X = np.zeros((num_atom_prim, 3, 3, 3), dtype=float)
         else:
             self._X = self._get_X()
+
         self._dPhidu = self._get_dPhidu()
 
         self._gruneisen_parameters = None
@@ -126,15 +82,14 @@ class Gruneisen:
 
     def set_sampling_mesh(self,
                           mesh,
-                          shift=None,
+                          grid_shift=None,
                           is_gamma_center=False):
         self._run_mode = 'mesh'
         self._mesh = mesh
-        self._qpoints, self._weights = get_qpoints(
-            self._mesh,
-            np.linalg.inv(self._pcell.get_cell()),
-            q_mesh_shift=shift,
-            is_gamma_center=is_gamma_center)
+        self._qpoints, self._weights = get_qpoints(self._mesh,
+                                                   self._pcell,
+                                                   grid_shift,
+                                                   is_gamma_center)
 
     def set_band_structure(self, paths):
         self._run_mode = 'band'
@@ -265,7 +220,7 @@ class Gruneisen:
                             g[s] += (w[nu * 3 + i, s].conjugate() * 
                                      dDdu[nu, pi, i, j] * w[pi * 3 + j, s]).real
 
-            g[s] *= -1.0 / 2 / omega2[s]
+            g[s] *= -1.0/2/omega2[s]
 
         return g, omega2
 
@@ -330,6 +285,10 @@ class Gruneisen:
         p2s = self._pcell.get_primitive_to_supercell_map()
         s2p = self._pcell.get_supercell_to_primitive_map()
         p2p = self._pcell.get_primitive_to_primitive_map()
+        # s2p = self._scell_extra.get_supercell_to_unitcell_map()
+        # p2p = {0:0, 32:1}
+
+
 
         Y = np.zeros((num_atom_super, 3, 3, 3), dtype=float)
 
@@ -341,12 +300,12 @@ class Gruneisen:
         return Y
 
     def _get_X(self):
-        num_atom_super = self._scell.get_number_of_atoms()
+        num_atom_super = self._scell_extra.get_number_of_atoms()
         num_atom_prim = self._pcell.get_number_of_atoms()
         p2s = self._pcell.get_primitive_to_supercell_map()
         lat = self._pcell.get_cell()
-        vecs = self._shortest_vectors
-        multi = self._multiplicity
+        vecs = self._shortest_vectors_extra
+        multi = self._multiplicity_extra
         X = np.zeros((num_atom_prim, 3, 3, 3), dtype=float)
         G = self._get_Gamma()
         P = self._fc2
@@ -379,10 +338,9 @@ class Gruneisen:
                     for i in range(3):
                         # Eigenvectors are real.
                         # 3: means optical modes
-                        G[pi, mu, k, i] = (
-                            1.0 / np.sqrt(m[pi] * m[mu]) *
+                        G[pi, mu, k, i] = 1.0 / np.sqrt(m[pi] * m[mu]) * \
                             (vecs[pi * 3 + k, 3:] * vecs[mu * 3 + i, 3:] /
-                             vals[3:]).sum())
+                             vals[3:]).sum()
         return G
 
             

@@ -34,35 +34,7 @@
 
 import numpy as np
 from phonopy.structure.cells import get_reduced_bases
-
-def get_dynamical_matrix(fc2,
-                         supercell,
-                         primitive,
-                         nac_params=None,
-                         frequency_scale_factor=None,
-                         decimals=None,
-                         symprec=1e-5):
-    if frequency_scale_factor is None:
-        _fc2 = fc2
-    else:
-        _fc2 = fc2 * frequency_scale_factor ** 2
-
-    if nac_params is None:
-        dm = DynamicalMatrix(
-            supercell,
-            primitive,
-            _fc2,
-            decimals=decimals,
-            symprec=symprec)
-    else:
-        dm = DynamicalMatrixNAC(
-            supercell,
-            primitive,
-            _fc2,
-            decimals=decimals,
-            symprec=symprec)
-        dm.set_nac_params(nac_params)
-    return dm
+DAMPING_FACTOR = 0.25
 
 class DynamicalMatrix:
     """Dynamical matrix class
@@ -85,17 +57,18 @@ class DynamicalMatrix:
                  supercell,
                  primitive,
                  force_constants,
+                 frequency_scale_factor=None,
                  decimals=None,
                  symprec=1e-5):
         self._scell = supercell
         self._pcell = primitive
-        self._force_constants = np.array(force_constants,
-                                         dtype='double', order='C')
+        self._force_constants = force_constants
+        self._freq_scale = frequency_scale_factor
         self._decimals = decimals
         self._symprec = symprec
 
-        self._p2s_map = primitive.get_primitive_to_supercell_map()
-        self._s2p_map = primitive.get_supercell_to_primitive_map()
+        self._p2s_map = np.intc(primitive.get_primitive_to_supercell_map())
+        self._s2p_map = np.intc(primitive.get_supercell_to_primitive_map())
         p2p_map = primitive.get_primitive_to_primitive_map()
         self._p2p_map = [p2p_map[self._s2p_map[i]]
                          for i in range(len(self._s2p_map))]
@@ -111,9 +84,6 @@ class DynamicalMatrix:
     def get_dimension(self):
         return self._pcell.get_number_of_atoms() * 3
 
-    def get_decimals(self):
-        return self._decimals
-    
     def get_supercell(self):
         return self._scell
 
@@ -133,7 +103,10 @@ class DynamicalMatrix:
         return self._s2p_map
 
     def get_dynamical_matrix(self):
-        dm = self._dynamical_matrix
+        if self._freq_scale is not None:
+            dm = self._dynamical_matrix * self._freq_scale ** 2
+        else:
+            dm = self._dynamical_matrix
 
         if self._decimals is None:
             return dm
@@ -181,33 +154,33 @@ class DynamicalMatrix:
 
     def _dynamical_matrix_log(self):
         dm = self._dynamical_matrix
-        for i in range(dm.shape[0] // 3):
-            for j in range(dm.shape[0] // 3):
+        for i in range(dm.shape[0]/3):
+            for j in range(dm.shape[0]/3):
                 dm_local = dm[(i*3):(i*3+3), (j*3):(j*3+3)]
                 for vec in dm_local:
                     re = vec.real
                     im = vec.imag
-                    print("dynamical matrix(%3d - %3d) "
-                          "%10.5f %10.5f %10.5f %10.5f %10.5f %10.5f" % 
-                          (i+1, j+1, re[0], im[0], re[1], im[1], re[2], im[2]))
-                print('')
+                    print "dynamical matrix(%3d - %3d) " \
+                        "%10.5f %10.5f %10.5f %10.5f %10.5f %10.5f" % \
+                        (i+1, j+1, re[0], im[0], re[1], im[1], re[2], im[2])
+                print
 
     def _smallest_vectors_log(self):
         r = self._smallest_vectors
         m = self._multiplicity
 
-        print("#%4s %4s %4s %4s %4s %10s" % 
-              ("p_i", "p_j", "s_i", "s_j", "mult", "dist"))
+        print "#%4s %4s %4s %4s %4s %10s" % \
+            ("p_i", "p_j", "s_i", "s_j", "mult", "dist")
         for p_i, s_i in enumerate(self._p2s_map): # run in primitive
             for s_j in range(r.shape[0]): # run in supercell
                 for tmp_p_j, tmp_s_j in enumerate(self._p2s_map):
                     if self._s2p_map[s_j] == tmp_s_j:
                         p_j = tmp_p_j
                 for k in range(m[s_j][p_i]):
-                    print(" %4d %4d %4d %4d %4d %10.5f" %
-                          (p_i+1, p_j+1, s_i+1, s_j+1, m[s_j][p_i],
-                           np.linalg.norm(np.dot(r[s_j][p_i][k],
-                                                 self._pcell.get_cell()))))
+                    print " %4d %4d %4d %4d %4d %10.5f" % \
+                        (p_i+1, p_j+1, s_i+1, s_j+1, m[s_j][p_i],
+                          np.linalg.norm(np.dot(r[s_j][p_i][k],
+                                                self._pcell.get_cell())))
 
     def _set_c_dynamical_matrix(self, q):
         import phonopy._phonopy as phonoc
@@ -217,10 +190,12 @@ class DynamicalMatrix:
         mass = self._pcell.get_masses()
         multiplicity = self._multiplicity
         size_prim = len(mass)
-        itemsize = self._force_constants.itemsize
-        dm = np.zeros((size_prim * 3, size_prim * 3),
-                      dtype=("c%d" % (itemsize * 2)))
-        phonoc.dynamical_matrix(dm.view(dtype='double'),
+        size_super = fc.shape[0]
+        dynamical_matrix_real = np.zeros((size_prim * 3, size_prim * 3),
+                                         dtype='double')
+        dynamical_matrix_image = np.zeros_like(dynamical_matrix_real)
+        phonoc.dynamical_matrix(dynamical_matrix_real,
+                                dynamical_matrix_image,
                                 fc,
                                 np.array(q, dtype='double'),
                                 vectors,
@@ -228,7 +203,8 @@ class DynamicalMatrix:
                                 mass,
                                 self._s2p_map,
                                 self._p2s_map)
-        self._dynamical_matrix = dm
+        dm = dynamical_matrix_real + dynamical_matrix_image * 1j
+        self._dynamical_matrix = (dm + dm.conj().transpose()) / 2
 
 # Non analytical term correction (NAC)
 # Call this when NAC is required instead of DynamicalMatrix
@@ -237,7 +213,7 @@ class DynamicalMatrixNAC(DynamicalMatrix):
                  supercell,
                  primitive,
                  force_constants,
-                 nac_params=None,
+                 frequency_scale_factor=None,
                  decimals=None,
                  symprec=1e-5):
 
@@ -245,13 +221,13 @@ class DynamicalMatrixNAC(DynamicalMatrix):
                                  supercell,
                                  primitive,
                                  force_constants,
+                                 frequency_scale_factor=frequency_scale_factor,
                                  decimals=decimals,
                                  symprec=1e-5)
         self._bare_force_constants = self._force_constants.copy()
-
+        self._method = None
+        self._nac_params = None
         self._nac = True
-        if nac_params is not None:
-            self.set_nac_params(nac_params)
 
     def get_born_effective_charges(self):
         return self._born
@@ -262,11 +238,20 @@ class DynamicalMatrixNAC(DynamicalMatrix):
     def get_dielectric_constant(self):
         return self._dielectric
     
-    def set_nac_params(self, nac_params):
-        self._born = np.array(nac_params['born'], dtype='double', order='C')
-        self._unit_conversion = nac_params['factor']
-        self._dielectric = np.array(nac_params['dielectric'],
-                                    dtype='double', order='C')
+    def set_nac_params(self, nac_params, method='wang'):
+        self._nac_params = nac_params
+        self._method = method
+
+        self._born = np.double(self._nac_params['born'])
+        factor = self._nac_params['factor']
+        if (isinstance(factor, list) or
+            isinstance(factor, tuple)):
+            self._unit_conversion = factor[0]
+            self._damping_factor = factor[1]
+        else:
+            self._unit_conversion = factor
+            self._damping_factor = DAMPING_FACTOR
+        self._dielectric = np.double(self._nac_params['dielectric'])
 
     def set_dynamical_matrix(self, q_red, q_direction=None, verbose=False):
         num_atom = self._pcell.get_number_of_atoms()
@@ -284,35 +269,52 @@ class DynamicalMatrixNAC(DynamicalMatrix):
             return False
     
         volume = self._pcell.get_volume()
-        constant = (self._unit_conversion * 4.0 * np.pi / volume
-                    / np.dot(q, np.dot(self._dielectric, q)))
+        constant = self._unit_conversion * 4.0 * np.pi / volume \
+            / np.dot(q, np.dot(self._dielectric, q))
+
+        # Parlinski method
+        if self._method=='parlinski':
+            charge_sum = self._get_charge_sum(num_atom, q)
+            nac_q = np.zeros((num_atom * 3, num_atom * 3), dtype='double')
+            m = self._pcell.get_masses()
+            q_distance = np.array(q_red) - np.rint(q_red)
+            constant *= np.exp(- np.dot(q_distance, q_distance) /
+                                 self._damping_factor ** 2)
+            for i in range(num_atom):
+                for j in range(num_atom):
+                    nac_q[i*3:(i+1)*3, j*3:(j+1)*3] = \
+                        charge_sum[i, j] * constant / np.sqrt(m[i] * m[j])
+
+            DynamicalMatrix.set_dynamical_matrix(self, q_red, verbose)
+            self._dynamical_matrix += nac_q
 
         # Wang method (J. Phys.: Condens. Matter 22 (2010) 202201)
-        import phonopy._phonopy as phonoc
-        try:
+        else:
             import phonopy._phonopy as phonoc
-            self._set_c_nac_dynamical_matrix(q_red, q, constant)
-        except ImportError:
-            fc = self._bare_force_constants.copy()
-            nac_q = np.zeros((num_atom, num_atom, 3, 3), dtype='double')
-            for i in range(num_atom):
-                A_i = np.dot(q, self._born[i])
-                for j in range(num_atom):
-                    A_j = np.dot(q, self._born[j])
-                    nac_q[i, j] = np.outer(A_i, A_j) * constant
-            self._set_NAC_force_constants(fc, nac_q)
-            self._force_constants = fc
-            DynamicalMatrix.set_dynamical_matrix(self, q_red, verbose)
+            try:
+                import phonopy._phonopy as phonoc
+                self._set_c_nac_dynamical_matrix(q_red, q, constant)
+            except ImportError:
+                fc = self._bare_force_constants.copy()
+                nac_q = np.zeros((num_atom, num_atom, 3, 3), dtype='double')
+                for i in range(num_atom):
+                    A_i = np.dot(q, self._born[i])
+                    for j in range(num_atom):
+                        A_j = np.dot(q, self._born[j])
+                        nac_q[i, j] = np.outer(A_i, A_j) * constant
+                self._set_NAC_force_constants(fc, nac_q)
+                self._force_constants = fc
+                DynamicalMatrix.set_dynamical_matrix(self, q_red, verbose)
 
     def _set_NAC_force_constants(self, fc, nac_q):
-        N = (self._scell.get_number_of_atoms() //
+        N = (self._scell.get_number_of_atoms() /
              self._pcell.get_number_of_atoms())
         for s1 in range(self._scell.get_number_of_atoms()):
             # This if-statement is the trick.
             # In contructing dynamical matrix in phonopy
             # fc of left indices with s1 == self._s2p_map[ s1 ] are
             # only used.
-            if s1 != self._s2p_map[s1]:
+            if not (s1==self._s2p_map[s1]):
                 continue
             p1 = self._p2p_map[s1]
             for s2 in range(self._scell.get_number_of_atoms()):            
@@ -337,10 +339,12 @@ class DynamicalMatrixNAC(DynamicalMatrix):
         mass = self._pcell.get_masses()
         multiplicity = self._multiplicity
         size_prim = len(mass)
-        itemsize = self._force_constants.itemsize
-        dm = np.zeros((size_prim * 3, size_prim * 3),
-                      dtype=("c%d" % (itemsize * 2)))
-        phonoc.nac_dynamical_matrix(dm.view(dtype='double'),
+        size_super = fc.shape[0]
+        dynamical_matrix_real = np.zeros((size_prim * 3, size_prim * 3),
+                                         dtype='double')
+        dynamical_matrix_image = np.zeros_like(dynamical_matrix_real)
+        phonoc.nac_dynamical_matrix(dynamical_matrix_real,
+                                    dynamical_matrix_image,
                                     fc,
                                     np.array(q_red, dtype='double'),
                                     vectors,
@@ -351,7 +355,8 @@ class DynamicalMatrixNAC(DynamicalMatrix):
                                     np.array(q, dtype='double'),
                                     self._born,
                                     factor)
-        self._dynamical_matrix = dm
+        dm = dynamical_matrix_real + dynamical_matrix_image * 1j
+        self._dynamical_matrix = (dm + dm.conj().transpose()) / 2
 
 
 # Helper methods
@@ -363,7 +368,8 @@ def get_equivalent_smallest_vectors(atom_number_supercell,
     distances = []
     differences = []
     reduced_bases = get_reduced_bases(supercell.get_cell(), symprec)
-    positions = np.dot(supercell.get_positions(), np.linalg.inv(reduced_bases))
+    positions = np.dot(supercell.get_positions(),
+                       np.linalg.inv(reduced_bases))
 
     # Atomic positions are confined into the lattice made of reduced bases.
     for pos in positions:
@@ -378,7 +384,7 @@ def get_equivalent_smallest_vectors(atom_number_supercell,
                 # the atom in supercell cell plus a supercell lattice
                 # point. This is related to determine the phase
                 # convension when building dynamical matrix.
-                diff = s_pos + [i, j, k] - p_pos
+                diff = s_pos + np.array([i, j, k]) - p_pos
                 differences.append(diff)
                 vec = np.dot(diff, reduced_bases)
                 distances.append(np.linalg.norm(vec))
@@ -428,4 +434,20 @@ def get_smallest_vectors(supercell, primitive, symprec):
                 shortest_vectors[i][j][k] = elem
 
     return shortest_vectors, multiplicity
+
+
+def get_distance_pp(primitive, symprec):
+    "Get the smallest distance between a pair of atoms in the primitive cell"
+    natom=primitive.get_number_of_atoms()
+    distance = np.zeros((natom, natom), dtype="double")
+    for i in range(natom):
+        for j in range(natom):
+            vectors = get_equivalent_smallest_vectors(i,
+                                                      j,
+                                                      primitive,
+                                                      primitive.get_cell(),
+                                                      symprec)
+            distance[i,j]=np.linalg.norm(np.dot(vectors[0] , primitive.get_cell()))
+    return distance
+
 

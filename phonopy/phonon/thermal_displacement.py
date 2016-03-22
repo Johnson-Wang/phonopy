@@ -42,12 +42,12 @@ class ThermalMotion:
                  frequencies, # have to be supplied in THz
                  eigenvectors,
                  masses,
-                 cutoff_frequency=None):
+                 cutoff_eigenvalue=None):
 
-        if cutoff_frequency is None:
-            self._cutoff_frequency = 0
+        if cutoff_eigenvalue==None:
+            self._cutoff_eigenvalue = 0
         else:
-            self._cutoff_frequency = cutoff_frequency
+            self._cutoff_eigenvalue = cutoff_eigenvalue
             
         self._distances = None
         self._displacements = None
@@ -109,15 +109,16 @@ class ThermalDisplacements(ThermalMotion):
                  frequencies, # Have to be supplied in THz
                  eigenvectors,
                  masses,
-                 cutoff_frequency=None):
+                 cutoff_eigenvalue=None):
 
         ThermalMotion.__init__(self,
                                frequencies,
                                eigenvectors,
                                masses,
-                               cutoff_frequency=cutoff_frequency)
+                               cutoff_eigenvalue=None)
 
         self._displacements = None
+        self._displacements_mesh = None
         
     def get_thermal_displacements(self):
         return (self._temperatures, self._displacements)
@@ -135,19 +136,49 @@ class ThermalDisplacements(ThermalMotion):
         disps = np.zeros((len(temps), len(masses)), dtype=float)
         for fs, vecs2 in zip(freqs, abs(eigvecs) ** 2):
             for f, v2 in zip(fs, vecs2.T):
-                if f > self._cutoff_frequency:
+                if f > np.sqrt(self._cutoff_eigenvalue):
                     c = v2 / masses
                     for i, t in enumerate(temps):
                         disps[i] += self.get_Q2(f, t) * c
             
         self._displacements = disps / len(freqs)
 
+    def run_mesh(self):
+        freqs = self._frequencies
+        temps = self._temperatures
+        if self._p_eigenvectors is not None:
+            masses = self._masses
+            eigvecs = self._p_eigenvectors
+        else:
+            masses = self._masses3
+            eigvecs = self._eigenvectors
+
+        disps = np.zeros((len(temps), len(masses), len(self._frequencies[0])), dtype=float)
+        for k, (fs, vecs2) in enumerate(zip(freqs, abs(eigvecs) ** 2)):
+            for s, (f, v2) in enumerate(zip(fs, vecs2.T)):
+                if f > np.sqrt(self._cutoff_eigenvalue):
+                    c = v2 / masses
+                    for i, t in enumerate(temps):
+                        disps[i, :, s] += self.get_Q2(f, t) * c
+
+        self._displacements_mesh = disps / len(freqs)
+        self._displacements = self._displacements_mesh.sum(axis=2)
+
+    def write_hdf5(self):
+        import h5py
+        f = h5py.File("thermal_displacements.hdf5", "w")
+        f.create_dataset("natom", data=len(self._masses))
+        f.create_dataset("temperature", data=self._temperatures)
+        f.create_dataset("thermal_displacement", data=self._displacements)
+        if self._displacements_mesh is not None:
+            f.create_dataset("thermal_displacement_mesh", data=self._displacements_mesh)
+        f.close()
+
     def write_yaml(self):
         natom = len(self._masses)
         f = open('thermal_displacements.yaml', 'w')
         f.write("# Thermal displacements\n")
         f.write("natom: %5d\n" % (natom))
-        f.write("cutoff_frequency: %f\n" % self._cutoff_frequency)
 
         f.write("thermal_displacements:\n")
         for t, u in zip(self._temperatures, self._displacements):
@@ -159,31 +190,37 @@ class ThermalDisplacements(ThermalMotion):
                     f.write(", %10.7f" % elems[j + 1])
                 f.write(" ] # atom %d\n" % (i + 1))
         
-    def plot(self, pyplot, is_legend=False):
+    def plot(self, is_legend=False):
+        import matplotlib.pyplot as plt
+
         plots = []
         labels = []
         xyz = ['x', 'y', 'z']
         for i, u in enumerate(self._displacements.transpose()):
-            plots.append(pyplot.plot(self._temperatures, u ))
+            plots.append(plt.plot(self._temperatures, u ))
             labels.append("%d-%s" % ( i//3 + 1, xyz[i % 3]))
         
         if is_legend:
-            pyplot.legend(plots, labels, loc='upper left')
+            plt.legend(plots, labels, loc='upper left')
+            
+        return plt
+
 
 class ThermalDisplacementMatrices(ThermalMotion):
     def __init__(self,
                  frequencies, # Have to be supplied in THz
                  eigenvectors,
                  masses,
-                 cutoff_frequency=None):
+                 cutoff_eigenvalue=None):
 
         ThermalMotion.__init__(self,
                                frequencies,
                                eigenvectors,
                                masses,
-                               cutoff_frequency=cutoff_frequency)
+                               cutoff_eigenvalue=None)
 
         self._disp_matrices = None
+        self._disp_matrices_mesh = None
 
     def get_thermal_displacement_matrices(self):
         return (self._temperatures, self._disp_matrices)
@@ -194,7 +231,7 @@ class ThermalDisplacementMatrices(ThermalMotion):
 
         for freqs, eigvecs in zip(self._frequencies, self._eigenvectors):
             for f, vec in zip(freqs, eigvecs.T):
-                if f > self._cutoff_frequency:
+                if f > np.sqrt(self._cutoff_eigenvalue):
                     c = []
                     for v, m in zip(vec.reshape(-1, 3), self._masses):
                         c.append(np.outer(v, v.conj()) / m)
@@ -202,26 +239,44 @@ class ThermalDisplacementMatrices(ThermalMotion):
                         disps[i] += self.get_Q2(f, t) * np.array(c)
         self._disp_matrices = disps / len(self._frequencies)
 
+
+    def run_mesh(self):
+        disps = np.zeros((len(self._temperatures), len(self._masses), len(self._frequencies[0]), 3, 3), dtype=complex)
+
+        for k, (freqs, eigvecs) in enumerate(zip(self._frequencies, self._eigenvectors)):
+            for s, (f, vec) in enumerate(zip(freqs, eigvecs.T)):
+                if f > np.sqrt(self._cutoff_eigenvalue):
+                    c = []
+                    for v, m in zip(vec.reshape(-1, 3), self._masses):
+                        c.append(np.outer(v, v.conj()) / m)
+                    for i, t in enumerate(self._temperatures):
+                        disps[i, :, s] += self.get_Q2(f, t) * np.array(c)
+        self._disp_matrices_mesh = disps / len(self._frequencies)
+        self._disp_matrices = np.sum(self._disp_matrices_mesh, axis=2)
+
+    def write_hdf5(self):
+        import h5py
+        f = h5py.File("thermal_displacement_matrices.hdf5", "w")
+        f.create_dataset("natom", data=len(self._masses))
+        f.create_dataset("temperature", data=self._temperatures)
+        f.create_dataset("disp_matrix", data=self._disp_matrices)
+        if self._disp_matrices_mesh is not None:
+            f.create_dataset("disp_matrix_mesh", data=self._disp_matrices_mesh)
+        f.close()
+
     def write_yaml(self):
         natom = len(self._masses)
         f = open('thermal_displacement_matrices.yaml', 'w')
         f.write("# Thermal displacement_matrices\n")
         f.write("natom: %5d\n" % (natom))
-        f.write("cutoff_frequency: %f\n" % self._cutoff_frequency)
         f.write("thermal_displacement_matrices:\n")
         for t, matrices in zip(self._temperatures, self._disp_matrices):
             f.write("- temperature:   %15.7f\n" % t)
             f.write("  displacement_matrices:\n")
             for i, mat in enumerate(matrices):
-                ## For checking imaginary part that should be zero
-                # f.write("  - # atom %d\n" % (i + 1))
-                # for v in mat:
-                #     f.write("    [ %f, %f, %f, %f, %f, %f ]\n" %
-                #             (tuple(v.real) + tuple(v.imag)))
-                m = mat.real
-                f.write("  - [ %f, %f, %f, %f, %f, %f ] # atom %d\n" %
-                        (m[0, 0], m[1, 1], m[2, 2],
-                         m[1, 2], m[0, 2], m[0, 1], i + 1))
+                f.write("  - # atom %d\n" % (i + 1))
+                for v in mat:
+                    f.write("    [ %f, %f, %f, %f, %f, %f ]\n" % (tuple(v.real) + tuple(v.imag)))
         
 class ThermalDistances(ThermalMotion):
     def __init__(self,
@@ -231,18 +286,20 @@ class ThermalDistances(ThermalMotion):
                  primitive,
                  qpoints,
                  symprec=1e-5,
-                 cutoff_frequency=None):
+                 cutoff_eigenvalue=None):
 
         self._primitive = primitive
         self._supercell = supercell
         self._qpoints = qpoints
         self._symprec = symprec
+        self._distances = None
+        self._distances_mesh = None
 
         ThermalMotion.__init__(self,
                                frequencies,
                                eigenvectors,
                                primitive.get_masses(),
-                               cutoff_frequency=cutoff_frequency)
+                               cutoff_eigenvalue=None)
 
     def _get_cross(self, v, delta_r, q, atom1, atom2):
         phase = np.exp(2j * np.pi * np.dot(delta_r, q))
@@ -262,7 +319,7 @@ class ThermalDistances(ThermalMotion):
                                                       self._primitive.get_cell(),
                                                       self._symprec)[0]
 
-            self._project_eigenvectors(delta_r, self._primitive.get_cell())
+            self.project_eigenvectors(delta_r, self._primitive.get_cell())
             
             for freqs, vecs, q in zip(self._frequencies,
                                       self._p_eigenvectors,
@@ -275,19 +332,65 @@ class ThermalDistances(ThermalMotion):
                 for f, v in zip(freqs, vecs.T):
                     cross_term = self._get_cross(v, delta_r, q, patom1, patom2)
                     v2 = abs(v)**2
-                    if f > self._cutoff_frequency:
+                    if f > np.sqrt(self._cutoff_eigenvalue):
                         for j, t in enumerate(self._temperatures):
                             dists[j, i] += self.get_Q2(f, t) * (
                                 v2[patom1] * c1 + cross_term * c_cross + v2[patom2] * c2)
             
         self._atom_pairs = atom_pairs
         self._distances = dists / len(self._frequencies)
-                             
+
+
+    def run_mesh(self, atom_pairs):
+        s2p = self._primitive.get_supercell_to_primitive_map()
+        p2p = self._primitive.get_primitive_to_primitive_map()
+        dists = np.zeros((len(self._temperatures), len(atom_pairs), len(self._frequencies[0])), dtype=float)
+        for i, (atom1, atom2) in enumerate(atom_pairs):
+            patom1 = p2p[s2p[atom1]]
+            patom2 = p2p[s2p[atom2]]
+            delta_r = get_equivalent_smallest_vectors(atom2,
+                                                      atom1,
+                                                      self._supercell,
+                                                      self._primitive.get_cell(),
+                                                      self._symprec)[0]
+
+            self.project_eigenvectors(delta_r, self._primitive.get_cell())
+
+            for k, (freqs, vecs, q) in enumerate(zip(self._frequencies,
+                                                     self._p_eigenvectors,
+                                                     self._qpoints)):
+                c_cross = 1.0 / np.sqrt(self._masses[patom1] *
+                                        self._masses[patom2])
+                c1 = 1.0 / self._masses[patom1]
+                c2 = 1.0 / self._masses[patom2]
+
+                for s, (f, v) in enumerate(zip(freqs, vecs.T)):
+                    cross_term = self._get_cross(v, delta_r, q, patom1, patom2)
+                    v2 = abs(v)**2
+                    if f > np.sqrt(self._cutoff_eigenvalue):
+                        for j, t in enumerate(self._temperatures):
+                            dists[j, i, s] += self.get_Q2(f, t) * (
+                                v2[patom1] * c1 + cross_term * c_cross + v2[patom2] * c2)
+
+        self._atom_pairs = atom_pairs
+        self._distances_mesh = dists / len(self._frequencies)
+        self._distances = self._distances_mesh.sum(axis=2)
+
+    def write_hdf5(self):
+        import h5py
+        f = h5py.File("thermal_distances.hdf5", "w")
+        f.create_dataset("natom", data=len(self._masses))
+        f.create_dataset("temperature", data=self._temperatures)
+        f.create_dataset("distance", data=self._distances)
+        f.create_dataset("pair", data=self._atom_pairs)
+        if self._distances_mesh is not None:
+            f.create_dataset("distance_mesh", data=self._distances_mesh)
+        f.close()
+
     def write_yaml(self):
         natom = len(self._masses)
         f = open('thermal_distances.yaml', 'w')
         f.write("natom: %5d\n" % (natom))
-        f.write("cutoff_frequency: %f\n" % self._cutoff_frequency)
 
         f.write("thermal_distances:\n")
         for t, u in zip(self._temperatures, self._distances):
