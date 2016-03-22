@@ -1,0 +1,444 @@
+#!/usr/bin/env python
+
+# Copyright (C) 2013 Atsushi Togo
+# All rights reserved.
+#
+# This file is part of phonopy.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# * Redistributions of source code must retain the above copyright
+#   notice, this list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright
+#   notice, this list of conditions and the following disclaimer in
+#   the documentation and/or other materials provided with the
+#   distribution.
+#
+# * Neither the name of the phonopy project nor the names of its
+#   contributors may be used to endorse or promote products derived
+#   from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+import os
+import sys
+import numpy as np
+from optparse import OptionParser
+
+from phonopy.interface.vasp import read_vasp
+from phonopy.structure.cells import get_supercell, Primitive, print_cell
+from phonopy.structure.symmetry import Symmetry
+from phonopy.harmonic.force_constants import set_translational_invariance, set_permutation_symmetry, get_force_constants
+from phonopy.harmonic.dynamical_matrix import DynamicalMatrix
+from phonopy.units import VaspToTHz
+from anharmonic.phonon3.fc3 import set_permutation_symmetry_fc3, set_translational_invariance_fc3, show_drift_fc3, get_fc3
+from anharmonic.file_IO import \
+    parse_disp_fc3_yaml, parse_disp_fc4_yaml,\
+    parse_DELTA_FORCES, parse_DELTA_FORCES_FOURTH,\
+    write_DELTA_FC2_SETS, parse_DELTA_FC2_SETS, \
+    write_DELTA_FC2_FOURTH_SETS, parse_DELTA_FC2_FOURTH_SETS,\
+    write_FORCES_FOURTH, parse_FORCES_SECOND, \
+    read_fc4_from_hdf5, read_fc3_from_hdf5, read_fc2_from_hdf5, \
+    write_fc4_to_hdf5, write_fc3_to_hdf5, write_fc2_to_hdf5, \
+    write_supercells_with_displacements, \
+    write_supercells_with_three_displacements, \
+    write_freq_shifts_to_hdf5
+from anharmonic.phonon3.displacement_fc3 import get_third_order_displacements
+from anharmonic.phonon4.displacement_fc4 import get_fourth_order_displacements
+from anharmonic.settings import Phono3pyConfParser
+from anharmonic.phonon4.fc4 import get_fc4, show_drift_fc4, set_translational_invariance_fc4, set_permutation_symmetry_fc4
+from anharmonic.phonon4 import Phono4py
+
+# AA is created at http://www.network-science.de/ascii/.
+def print_phono4py():
+    print """       _                       _  _               
+ _ __ | |__   ___  _ __   ___ | || |  _ __  _   _ 
+| '_ \| '_ \ / _ \| '_ \ / _ \| || |_| '_ \| | | |
+| |_) | | | | (_) | | | | (_) |__   _| |_) | |_| |
+| .__/|_| |_|\___/|_| |_|\___/   |_| | .__/ \__, |
+|_|                                  |_|    |___/ 
+"""
+
+def print_end():
+    print """                 _ 
+   ___ _ __   __| |
+  / _ \ '_ \ / _` |
+ |  __/ | | | (_| |
+  \___|_| |_|\__,_|
+"""
+
+def print_error(message):
+    print message
+
+# Parse options
+parser = OptionParser()
+parser.set_defaults(amplitude=None,
+                    band_indices=None,
+                    cell_poscar=None,
+                    factor=None,
+                    fc2_fourth_sets_mode=False,
+                    forces_fourth_mode=False,
+                    grid_points=None,
+                    is_nodiag=False,
+                    is_displacement=False,
+                    is_nosym=False,
+                    is_plusminus_displacements=False,
+                    is_translational_symmetry=False,
+                    is_symmetrize_fc2=False,
+                    is_symmetrize_fc3_r=False,
+                    is_symmetrize_fc4_r=False,
+                    log_level=None,
+                    mesh_numbers=None,
+                    primitive_axis=None,
+                    read_fc2_fourth=False,
+                    read_fc2=False,
+                    read_fc3=False,
+                    read_fc4=False,
+                    output_filename=None,
+                    supercell_dimension=None,
+                    symprec=1e-5,
+                    temperatures=None,
+                    verbose=True)
+parser.add_option("--amplitude", dest="amplitude", type="float",
+                  help="Distance of displacements")
+parser.add_option("--bi", "--band_indices", dest="band_indices",
+                  type="string",
+                  help="Band indices where life time is calculated")
+parser.add_option("-c", "--cell", dest="cell_poscar",
+                  action="store", type="string",
+                  help="Read unit cell", metavar="FILE")
+parser.add_option("--create_fc2_fourth",
+                  dest="fc2_fourth_sets_mode",
+                  action="store_true",
+                  help="Create DELTA_FC2_FOURTH_SETS, DELTA_FC2_SETS, and fc2.hdf")
+parser.add_option("--cf4", "--create_f4",
+                  dest="forces_fourth_mode",
+                  action="store_true",
+                  help="Create FORCES_FOURTH")
+parser.add_option("-d", "--disp", dest="is_displacement",
+                  action="store_true",
+                  help="As first stage, get least displacements")
+parser.add_option("--dim",
+                  dest="supercell_dimension",
+                  type="string",
+                  help="Supercell dimension")
+parser.add_option("--factor", dest="factor", type="float",
+                  help="Conversion factor to favorite frequency unit")
+parser.add_option("--fc2",
+                  dest="read_fc2",
+                  action="store_true",
+                  help="Read second order force constants")
+parser.add_option("--fc2_fourth",
+                  dest="read_fc2_fourth",
+                  action="store_true",
+                  help="Read DELTA_FC2_FOURTH_SETS, DELTA_FC2_SETS, and fc2.hdf")
+parser.add_option("--fc3",
+                  dest="read_fc3",
+                  action="store_true",
+                  help="Read third order force constants")
+parser.add_option("--fc4",
+                  dest="read_fc4",
+                  action="store_true",
+                  help="Read fourth order force constants")
+parser.add_option("--gp", "--grid_points",
+                  dest="grid_points",
+                  type="string",
+                  help="Fixed grid points where damping functions are calculated ")
+parser.add_option("--mesh",
+                  dest="mesh_numbers",
+                  type="string",
+                  help="Mesh numbers")
+parser.add_option("--nodiag", dest="is_nodiag",
+                  action="store_true",
+                  help="Set displacements parallel to axes")
+parser.add_option("--nosym", dest="is_nosym",
+                  action="store_true",
+                  help="No symmetrization of triplets")
+parser.add_option("-o", dest="output_filename",
+                  type="string",
+                  help="Filename of output of damping function")
+parser.add_option("--pa", "--primitive_axis", dest="primitive_axis",
+                  action="store", type="string",
+                  help="Same as PRIMITIVE_AXIS tags")
+parser.add_option("--pm", dest="is_plusminus_displacements",
+                  action="store_true",
+                  help="Set plus minus displacements")
+parser.add_option("--sym_fc2", dest="is_symmetrize_fc2",
+                  action="store_true",
+                  help="Symmetrize fc2 by index exchange")
+parser.add_option("--sym_fc3r", dest="is_symmetrize_fc3_r",
+                  action="store_true",
+                  help="Symmetrize fc3 in real space by index exchange")
+parser.add_option("--sym_fc4r", dest="is_symmetrize_fc4_r",
+                  action="store_true",
+                  help="Symmetrize fc4 in real space by index exchange")
+parser.add_option("--ts", dest="temperatures", 
+                  type="string", help="Temperatures for damping functions")
+parser.add_option("--tsym", dest="is_translational_symmetry",
+                  action="store_true",
+                  help="Impose translational invariance condition")
+parser.add_option("--tolerance", dest="symprec", type="float",
+                  help="Symmetry tolerance to search")
+parser.add_option("-v", "--verbose", dest="verbose",
+                  action="store_true",
+                  help="Detailed run-time information is displayed")
+parser.add_option("--loglevel", dest="log_level", type="int",
+                  help="Log level")
+(options, args) = parser.parse_args()
+option_list = parser.option_list
+
+# Log level
+if options.log_level is None:
+    log_level = options.verbose
+else:
+    log_level = options.log_level
+    
+# Create FC2_FOURTH_SETS
+if options.fc2_fourth_sets_mode:
+    displacements = parse_disp_fc3_yaml()
+    write_DELTA_FC2_FOURTH_SETS(args, displacements)
+    print_end()
+    exit(0)
+
+# Create FC2_FOURTH_SETS
+if options.forces_fourth_mode:
+    displacements = parse_disp_fc4_yaml()
+    write_FORCES_FOURTH(args, displacements)
+    print_end()
+    exit(0)
+
+# Title
+if log_level:
+    print_phono4py()
+
+if len(args) > 0:
+    phono3py_conf = Phono3pyConfParser(filename=args[0],
+                                       options=options,
+                                       option_list=option_list)
+    settings = phono3py_conf.get_settings()
+
+else:
+    phono3py_conf = Phono3pyConfParser(options=options,
+                                       option_list=option_list)
+    settings = phono3py_conf.get_settings()
+
+# Read POSCAR
+if options.cell_poscar == None:
+    if os.path.exists('POSCAR'):
+        unitcell_filename = 'POSCAR'
+    else:
+        print_error("POSCAR could not be found.")
+        if log_level:
+            print_end()
+        sys.exit(1)
+else:
+    if os.path.exists(options.cell_poscar):
+        unitcell_filename = options.cell_poscar
+    else:
+        print_error("%s not found" % options.cell_poscar)
+        if log_level:
+            print_end()
+        sys.exit(1)
+    
+unitcell = read_vasp(unitcell_filename,
+                     settings.get_chemical_symbols())
+
+# Supercell and Symmetry 
+supercell = get_supercell(unitcell, settings.get_supercell_matrix())
+symmetry = Symmetry(supercell, options.symprec)
+
+# Log
+if log_level:
+    print "Spacegroup: ", symmetry.get_international_table()
+
+###############################################################
+# Create supercells with displacements and exit (pre-process) #
+###############################################################
+if options.is_displacement:
+    dds = get_fourth_order_displacements(
+        supercell,
+        symmetry,
+        is_plusminus=settings.get_is_plusminus_displacement(),
+        is_diagonal=settings.get_is_diagonal_displacement())
+    write_supercells_with_three_displacements(supercell,
+                                              dds,
+                                              options.amplitude)
+    
+##########################################
+# Calculate fourth-order force constants #
+##########################################
+else:
+    primitive = Primitive(
+        supercell,
+        np.dot(np.linalg.inv(settings.get_supercell_matrix()),
+               settings.get_primitive_matrix()),
+        options.symprec)
+
+    if log_level:
+        print "------------------------ primitive cell for fc ---------------------------"
+        print_cell(primitive)
+        print "-------------------------- supercell for fc ------------------------------"
+        print_cell(supercell, mapping=primitive.get_supercell_to_primitive_map())
+        print "----------------- ratio (supercell for fc)/(primitive) -------------------"
+        for vec in np.dot(supercell.get_cell(), np.linalg.inv(primitive.get_cell())):
+            print "%5.2f"*3 % tuple(vec)
+
+    # fc2
+    if options.read_fc2:
+        if log_level:
+            print  "----- Read fc2 -----"
+            sys.stdout.flush()
+        if os.path.exists('fc2.hdf5'):
+            fc2 = read_fc2_from_hdf5()
+        else:
+            print "fc2.hdf5 not found"
+            if log_level:
+                print_end()
+            sys.exit(0)
+    else:
+        if log_level:
+            print "----- Solve fc2 -----"
+            sys.stdout.flush()
+
+        disp_dataset = parse_disp_fc4_yaml()
+        forces_second = parse_FORCES_SECOND(disp_dataset)
+        fc2 = get_force_constants(forces_second,
+                                  symmetry,
+                                  supercell)
+
+    if options.is_symmetrize_fc2:
+        set_permutation_symmetry(fc2)
+
+    if options.is_translational_symmetry:
+        set_translational_invariance(fc2)
+
+    if not options.read_fc2:
+        if log_level:
+            print "----- Write fc2.hdf5 -----"
+        write_fc2_to_hdf5(fc2)
+            
+    # fc3
+    if options.read_fc3: # Read fc3.hdf5
+        if log_level:
+            print  "----- Read fc3 -----"
+            sys.stdout.flush()
+        fc3 = read_fc3_from_hdf5()
+        if options.is_translational_symmetry:
+            set_translational_invariance_fc3(fc3)
+    else:
+        if log_level:
+            print  "----- Solve fc3 -----"
+            sys.stdout.flush()
+
+        if options.read_fc2_fourth: # fc3 from DELTA_FC2_SETS
+            displacements = parse_disp_fc3_yaml()
+            parse_DELTA_FC2_SETS(displacements)
+        else: # fc3 from DELTA_FORCES
+            displacements = parse_disp_fc3_yaml()
+            parse_DELTA_FORCES(displacements)
+        fc3 = get_fc3(
+            supercell,
+            displacements,
+            fc2,
+            symmetry,
+            is_translational_symmetry=options.is_translational_symmetry,
+            is_permutation_symmetry=options.is_symmetrize_fc3_r,          
+            verbose=log_level)
+
+    if options.is_symmetrize_fc3_r:
+        if log_level:
+            print "----- Symmetrize fc3 by index exchange in real space  -----"
+        set_permutation_symmetry_fc3(fc3)
+
+    show_drift_fc3(fc3)
+
+    if not options.read_fc3:
+        if log_level:
+            print "----- Write fc3.hdf5 -----"
+        write_fc3_to_hdf5(fc3)
+
+    # fc4
+    if options.read_fc4: # Read fc4.hdf
+        if log_level:
+            print  "----- Read fc4 -----"
+            sys.stdout.flush()
+        fc4 = read_fc4_from_hdf5()
+        if options.is_translational_symmetry:
+            if log_level:
+                print "----- Impose translational invariance "
+                print "condition to fc4 -----"
+            set_translational_invariance_fc4(fc4)
+    else:
+        if options.read_fc2_fourth:
+            displacements = parse_disp_fc4_yaml()
+            parse_DELTA_FC2_FOURTH_SETS(displacements)
+        else: # fc4 from FORCES_FOURTH, FORCES_THIRD and FORCES_SECOND
+            displacements = parse_disp_fc4_yaml()
+            parse_DELTA_FORCES_FOURTH(displacements)
+        fc4 = get_fc4(
+            supercell,
+            displacements,
+            fc3,
+            symmetry,
+            is_translational_symmetry=options.is_translational_symmetry,
+            is_permutation_symmetry=options.is_symmetrize_fc4_r,
+            verbose=log_level)
+
+    if options.is_symmetrize_fc4_r:
+        if log_level:
+            print "----- Symmetrize fc4 by index exchange in real space -----"
+        set_permutation_symmetry_fc4(fc4)
+
+        
+    if log_level:
+        print "(Calculating fc4 drift...)"
+    show_drift_fc4(fc4)
+
+    if not options.read_fc4:
+        if log_level:
+            print "----- Write fc4.hdf5 -----"
+        write_fc4_to_hdf5(fc4)
+
+    if options.factor is None:
+        factor = VaspToTHz
+    else:
+        factor = options.factor
+
+    mesh = settings.get_mesh_numbers()
+
+    if mesh is not None:
+        phono4py = Phono4py(fc4,
+                            supercell,
+                            primitive,
+                            mesh,
+                            band_indices=settings.get_band_indices(),
+                            frequency_factor_to_THz=factor,
+                            cutoff_frequency=1e-2,
+                            is_nosym=options.is_nosym,
+                            symprec=options.symprec,
+                            log_level=log_level)
+        phono4py.set_frequency_shift(temperatures=settings.get_temperatures())
+        phono4py.set_dynamical_matrix(fc2,
+                                      supercell,
+                                      primitive)
+        phono4py.run_frequency_shift(settings.get_grid_points())
+        freq_shifts = phono4py.get_frequency_shift()
+        write_freq_shifts_to_hdf5(freq_shifts)
+                            
+        
+if log_level:
+    print_end()

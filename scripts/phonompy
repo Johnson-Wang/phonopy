@@ -1,0 +1,539 @@
+#!/usr/bin/env python
+
+# Copyright (C) 2011 Atsushi Togo
+# Copyright (C) 2014 Wang Xinjiang
+# All rights reserved.
+#
+# This file is part of phonopy.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# * Redistributions of source code must retain the above copyright
+#   notice, this list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright
+#   notice, this list of conditions and the following disclaimer in
+#   the documentation and/or other materials provided with the
+#   distribution.
+#
+# * Neither the name of the phonopy project nor the names of its
+#   contributors may be used to endorse or promote products derived
+#   from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+import os
+import sys
+import numpy as np
+from datetime import datetime
+from optparse import OptionParser
+from anharmonic.settings import PhonompyConfParser
+from phonopy.interface.vasp import read_vasp
+from phonopy.structure.cells import get_supercell, Primitive, print_cell
+from phonopy.structure.symmetry import Symmetry
+from phonopy.harmonic.force_constants import get_force_constants, \
+    set_permutation_symmetry, symmetrize_force_constants, \
+    set_translational_invariance, show_drift_force_constants
+from phonopy.file_IO import parse_BORN,parse_FORCE_CONSTANTS,parse_FORCE_SETS
+from phonopy.units import VaspToTHz
+from anharmonic.phonon3.triplets import get_ir_grid_points
+from anharmonic.phononmd import Phonompy
+from anharmonic.file_IO import write_ir_grid_points,read_fc2_from_hdf5, write_fc2_to_hdf5
+phono3py_version = "0.6.2"
+
+# AA is created at http://www.network-science.de/ascii/.
+
+def print_phonompy(time=None):
+    print " ".join(sys.argv)
+    print """
+       _
+ _ __ | |__   ___  _ __   ___  _ __ ___  _ __  _   _
+| '_ \| '_ \ / _ \| '_ \ / _ \| '_ ` _ \| '_ \| | | |
+| |_) | | | | (_) | | | | (_) | | | | | | |_) | |_| |
+| .__/|_| |_|\___/|_| |_|\___/|_| |_| |_| .__/ \__, |
+|_|                                     |_|    |___/ """
+    if time:
+        print "Program begins at", str(time)
+    
+def file_exists(filename, log_level):
+    if os.path.exists(filename):
+        return True
+    else:
+        error_text = "%s not found." % filename
+        print_error_message(error_text)
+        if log_level > 0:
+            print_error()
+        sys.exit(1)
+
+def print_version(version):
+    print " " * 42, version
+    print ""
+
+def print_end(time =None):
+    if time:
+        print "Program ends at:", str(time)
+    print """                 _
+   ___ _ __   __| |
+  / _ \ '_ \ / _` |
+ |  __/ | | | (_| |
+  \___|_| |_|\__,_|
+"""
+
+def print_error():
+    print """  ___ _ __ _ __ ___  _ __
+ / _ \ '__| '__/ _ \| '__|
+|  __/ |  | | | (_) | |
+ \___|_|  |_|  \___/|_|
+"""
+
+def print_error_message(message):
+    print message
+
+# Parse options
+parser = OptionParser()
+parser.set_defaults(band_indices=None,
+                    band_paths=None,
+                    band_points=None,
+                    cell_poscar=None,
+                    delta_fc2=False,
+                    factor=None,
+                    freq_scale=None,
+                    grid_points=None,
+                    gv_delta_q=None,
+                    is_nosym=False,
+                    is_gamma_center=False,
+                    is_linewidth=False,
+                    is_nac=False,
+                    is_translational_symmetry=False,
+                    is_symmetrize_fc2=False,
+                    log_level=None,
+                    mesh_numbers=None,
+                    mesh_divisors=None,
+                    no_kappa_stars=False,
+                    q_direction=None,
+                    primitive_axis=None,
+                    read_fc2=False,
+                    read_fc2_extra=False,
+                    read_gamma=False,
+                    freq_step=None,
+                    input_filename=None,
+                    output_filename=None,
+                    qpoints=None,
+                    mesh_shift=None,
+                    quiet=False,
+                    sigma=None,
+                    supercell_dimension=None,
+                    supercell_dimension_extra=None,
+                    symprec=1e-5,
+                    temperatures=None,
+                    verbose=False,
+                    uplo='L',
+                    write_gamma=False,
+                    write_grid_points=False)
+parser.add_option("--bi", "--band_indices", dest="band_indices",
+                  type="string",
+                  help="Band indices where life time is calculated")
+parser.add_option("--band", dest="band_paths",
+                  action="store", type="string",
+                  help="Band structure paths calculated for Gruneisen parameter")
+parser.add_option("--band_points", dest="band_points",
+                  type="int",
+                  help="Number of points calculated on a band segment in the band structure Gruneisen parameter calculation")
+parser.add_option("--br", "--bterta", dest="is_bterta",
+                  action="store_true",
+                  help="Calculate thermal conductivity in BTE-RTA")
+parser.add_option("-c", "--cell", dest="cell_poscar",
+                  action="store", type="string",
+                  help="Read unit cell", metavar="FILE")
+parser.add_option("--dim",
+                  dest="supercell_dimension",
+                  type="string",
+                  help="Supercell dimension")
+parser.add_option("--dim2",
+                  dest="supercell_dimension_extra",
+                  type="string",
+                  help="Supercell dimension for extra fc2")
+parser.add_option("--factor", dest="factor", type="float",
+                  help="Conversion factor to favorite frequency unit")
+parser.add_option("--fc2",
+                  dest="read_fc2",
+                  action="store_true",
+                  help="Read second order force constants")
+parser.add_option("--fc2_extra",
+                  dest="read_fc2_extra",
+                  action="store_true",
+                  help="Read extra second order force constants")
+parser.add_option("--gv_delta_q", dest="gv_delta_q", type="float",
+                  help="Delta-q distance used for group velocity calculation")
+parser.add_option("--lw", "--linewidth",
+                  dest="is_linewidth",
+                  action="store_true",
+                  help="Calculate linewidths")
+parser.add_option("--mesh",
+                  dest="mesh_numbers",
+                  type="string",
+                  help="Mesh numbers")
+parser.add_option("--gc", "--gamma_center", dest="is_gamma_center",
+                  action="store_true",
+                  help="Set mesh as Gamma center")
+parser.add_option("--mp_shift","--mesh_shift", dest="mesh_shift",
+                  action="store", type="string",
+                  help="Mesh shift from gamma center scheme")
+parser.add_option("--gp", "--grid_points",
+                  dest="grid_points",
+                  type="string",
+                  help="Fixed grid points where damping functions are calculated ")
+parser.add_option("--nac", dest="is_nac",
+                  action="store_true",
+                  help="Non-analytical term correction")
+parser.add_option("--nosym", "--no_kappa_stars", dest="is_nosym",
+                  action="store_true",
+                  help="No symmetry consideration for meshing"),
+parser.add_option("-i",dest="input_filename",
+                  type="string",
+                  help="Filename of input thermal conductivity calculated through rta")
+parser.add_option("-o", dest="output_filename",
+                  type="string",
+                  help="Filename of output of damping function")
+parser.add_option("--pa", "--primitive_axis", dest="primitive_axis",
+                  action="store", type="string",
+                  help="Same as PRIMITIVE_AXIS tags")
+parser.add_option("--qpoints", dest="qpoints", type="string",
+                  help="Calculate at specified q-points")
+parser.add_option("--q_direction",
+                  dest="q_direction",
+                  type="string",
+                  help="q-vector direction at q->0 for non-analytical term correction")
+parser.add_option("-q", "--quiet", dest="quiet",
+                  action="store_true",
+                  help="Print out smallest information")
+parser.add_option("--read_gamma", dest="read_gamma",
+                  action="store_true",
+                  help="Read Gammas from files")
+parser.add_option("--sym_fc2", dest="is_symmetrize_fc2",
+                  action="store_true",
+                  help="Symmetrize fc2 by index exchange")
+parser.add_option("--tsym", dest="is_translational_symmetry",
+                  action="store_true",
+                  help="Impose translational invariance condition")
+parser.add_option("--tolerance", dest="symprec", type="float",
+                  help="Symmetry tolerance to search")
+parser.add_option("-v", "--verbose", dest="verbose",
+                  action="store_true",
+                  help="Detailed run-time information is displayed")
+parser.add_option("--loglevel", dest="log_level", type="int",
+                  help="Log level")
+parser.add_option("--ts", dest="temperatures", 
+                  type="string", help="Temperatures for damping functions")
+parser.add_option("--uplo",
+                  dest="uplo",
+                  type="string",
+                  help="Lapack zheev UPLO")
+parser.add_option("--wgp", "--write_grid_points", dest="write_grid_points",
+                  action="store_true",
+                  help="Write grid address of irreducible grid points for specified mesh numbers to ir_grid_address.yaml")
+parser.add_option("--write_gamma", dest="write_gamma",
+                  action="store_true",
+                  help="Write gamma")
+(options, args) = parser.parse_args()
+option_list = parser.option_list
+
+
+# Log level
+log_level = 1
+if options.verbose:
+    log_level = 2
+if options.quiet:
+    log_level = 0
+if not options.log_level==None:
+    log_level=options.log_level
+    
+# Title
+if log_level:
+    print_phonompy(datetime.now())
+    print_version(phono3py_version)
+
+
+# Import input files
+if len(args) > 0:
+    phonompy_conf = PhonompyConfParser(filename=args[0],
+                                       options=options,
+                                       option_list=option_list)
+    settings = phonompy_conf.get_settings()
+
+else:
+    phonompy_conf = PhonompyConfParser(options=options,
+                                       option_list=option_list)
+    settings = phonompy_conf.get_settings()
+
+# Read POSCAR
+if options.cell_poscar == None:
+    if os.path.exists('POSCAR'):
+        unitcell_filename = 'POSCAR'
+    else:
+        print_error_message("POSCAR could not be found.")
+        if log_level:
+            print_end()
+        sys.exit(1)
+else:
+    if os.path.exists(options.cell_poscar):
+        unitcell_filename = options.cell_poscar
+    else:
+        print_error_message("The file \'%s\' could not be found." %
+                    options.cell_poscar)
+        if log_level:
+            print_end()
+        sys.exit(1)
+    
+unitcell = read_vasp(unitcell_filename,
+                     settings.get_chemical_symbols())
+
+# Supercell and Symmetry 
+supercell = get_supercell(unitcell, settings.get_supercell_matrix())
+symmetry = Symmetry(supercell, options.symprec)
+
+if settings.get_supercell_matrix_extra() is not None:
+    supercell_extra = get_supercell(unitcell, settings.get_supercell_matrix_extra())
+    symmetry_extra = Symmetry(supercell_extra, options.symprec)
+
+# Log
+if log_level:
+    if options.is_translational_symmetry:
+        print "Translational symmetry:", options.is_translational_symmetry
+    if options.is_symmetrize_fc2:
+        print "FC2 symmetry of index exchange:", options.is_symmetrize_fc2
+    if not options.supercell_dimension_extra == None:
+        print "Extra supercell for fc2 is supplied."
+    if settings.get_is_nac():
+        print "Non-analytical term correction:", settings.get_is_nac()
+    print "Spacegroup: ", symmetry.get_international_table()
+
+primitive = Primitive(
+    supercell,
+    np.dot(np.linalg.inv(settings.get_supercell_matrix()),
+           settings.get_primitive_matrix()),
+    options.symprec)
+
+if not settings.get_supercell_matrix_extra()==None:
+    primitive_extra = Primitive(
+        supercell_extra,
+        np.dot(np.linalg.inv(settings.get_supercell_matrix_extra()),
+               settings.get_primitive_matrix()),
+        options.symprec)
+
+
+
+if log_level:
+    print "------------------------ primitive cell for fc ---------------------------"
+    print_cell(primitive)
+    print "-------------------------- supercell for fc ------------------------------"
+    print_cell(supercell, mapping=primitive.get_supercell_to_primitive_map())
+    print "----------------- ratio (supercell for fc)/(primitive) -------------------"
+    for vec in np.dot(supercell.get_cell(), np.linalg.inv(primitive.get_cell())):
+        print "%5.2f"*3 % tuple(vec)
+if log_level and (not settings.get_supercell_matrix_extra()==None):
+    print "------------------------- primitive cell extra ----------------------------"
+    print_cell(primitive_extra)
+    print "--------------------------- supercell extra -------------------------------"
+    print_cell(supercell_extra, mapping=primitive_extra.get_supercell_to_primitive_map())
+    print "--------------- ratio (supercell extra)/(primitive  extra) ----------------"
+    for vec in np.dot(supercell_extra.get_cell(),
+                       np.linalg.inv(primitive_extra.get_cell())):
+        print "%5.2f"*3 % tuple(vec)
+
+# Write ir-grid points
+if options.write_grid_points:
+    print "---------------------------------------------------------------------------"
+    mesh = settings.get_mesh_numbers()
+    if mesh is None:
+        print "To write grid points, mesh numbers have to be specified."
+    else:
+        print "Ir-grid points are written into ir_grid_points.yaml."
+        (grid_points, grid_weights, grid_address) =\
+            get_ir_grid_points(mesh, primitive,settings.get_coarse_mesh_shifts())
+        write_ir_grid_points(mesh,
+                             grid_points,
+                             grid_weights,
+                             grid_address)
+
+
+# fc2
+if settings.get_read_fc2() or options.read_delta_fc2:
+    if log_level:
+        print  "----- Read fc2 -----"
+        sys.stdout.flush()
+    if os.path.exists('fc2.hdf5'):
+        fc2 = read_fc2_from_hdf5()
+    elif os.path.exists('force_constants.hdf5'):
+        fc2 = read_fc2_from_hdf5(filename='force_constants.hdf5')
+    elif os.path.exists("FORCE_CONSTANTS"):
+        fc2 = parse_FORCE_CONSTANTS("FORCE_CONSTANTS")
+    else:
+        print "harmonic interatomic force constants not found"
+        if log_level:
+            print_end()
+        sys.exit(0)
+else:
+    if log_level:
+        print "----- Solve fc2 -----"
+        sys.stdout.flush()
+    #
+    # disp_dataset = parse_disp_fc3_yaml()
+    # forces_second = parse_FORCES_SECOND(disp_dataset)
+
+    file_exists("FORCE_SETS", log_level)
+    forces_second = parse_FORCE_SETS(supercell_extra.get_number_of_atoms())
+    if forces_second==None:
+        error_text = "\nNumber of atoms in FORCE_SETS doesn't match to supercell.\n"
+        error_text += "Please check DIM and FORCE_SETS."
+        print_error_message(error_text)
+        if log_level > 0:
+            print_end()
+        sys.exit(1)
+    print "Calculating force constants..."
+    fc2 = get_force_constants(forces_second,
+                                       symmetry,
+                                       supercell_extra)
+
+if options.is_symmetrize_fc2:
+    set_permutation_symmetry(fc2)
+
+if options.is_translational_symmetry:
+    set_translational_invariance(fc2)
+
+show_drift_force_constants(fc2, name='fc2')
+
+if not settings.get_read_fc2():
+    if log_level:
+        print "----- Write fc2.hdf5 -----"
+    write_fc2_to_hdf5(fc2)
+
+if settings.get_is_nac():
+    if os.path.exists('BORN'):
+        if settings.get_supercell_matrix_extra()==None:
+            nac_params = parse_BORN(primitive)
+        else:
+            nac_params = parse_BORN(primitive_extra)
+
+        nac_q_direction = settings.get_q_direction()
+    else:
+        print_error_message("BORN not found")
+        if log_level:
+            print_end()
+        sys.exit(1)
+else:
+    nac_params = None
+    nac_q_direction = None
+
+#===========================
+# relaxation time from md
+#===========================
+
+
+if options.grid_points is None:
+    grid_points = None
+else:
+    grid_points = np.array(
+        [int(x) for x in options.grid_points.replace(',', ' ').split()])
+
+if options.factor is None:
+    factor = VaspToTHz
+else:
+    factor = options.factor
+
+freq_factor = 1.0
+
+if settings.get_omega_step() is None:
+    freq_step = 0.1 * freq_factor
+else:
+    freq_step = settings.get_omega_step()
+
+if options.freq_scale is None:
+    freq_scale = 1.0
+else:
+    freq_scale = options.freq_scale
+
+if settings.get_supercell_matrix_extra() is None:
+    supercell_dm = supercell
+    primitive_dm = primitive
+else:
+    supercell_dm = supercell_extra
+    primitive_dm = primitive_extra
+
+temperature = settings.get_temperature()
+
+if settings.get_mesh_numbers() is not None:
+    mesh = settings.get_mesh_numbers()
+    if log_level:
+        print "------ Settings ------"
+        print "Mesh sampling: [ %d %d %d ]" % tuple(mesh)
+        if grid_points is not None:
+            print "Grid points to be calculated:", grid_points
+        sys.stdout.flush()
+
+
+phonompy = Phonompy(supercell,
+                    primitive,
+                    band_indices=settings.get_band_indices(),
+                    frequency_factor_to_THz=factor,
+                    is_tsym=settings.get_time_symmetry(),
+                    is_nosym=options.is_nosym,
+                    symprec=options.symprec,
+                    log_level=log_level,
+                    lapack_zheev_uplo=options.uplo,
+                    pos_file = settings.get_pos_file(),
+                    pos_format = settings.get_pos_format(),
+                    is_pos_average = settings.get_is_pos_average(),
+                    time_step = settings.get_time_step(),
+                    sample_length = settings.get_sample_length(),
+                    correlation_length = settings.get_correlation_length(),
+                    is_write_ac = settings.get_is_write_ac(),
+                    is_plot = settings.get_is_plot(),
+                    is_save = settings.get_is_save())
+
+phonompy.set_dynamical_matrix(fc2,
+                              supercell_dm,
+                              primitive_dm,
+                              nac_params=nac_params,
+                              nac_q_direction=nac_q_direction,
+                              frequency_scale_factor=freq_scale)
+
+if settings.get_is_linewidth():
+    if settings.get_mesh_numbers() is not None and grid_points is not None:
+        phonompy.set_grid_points(grid_points=grid_points,
+                                 mesh=settings.get_mesh_numbers(),
+                                 is_gamma_center = options.is_gamma_center,
+                                 mesh_shift=settings.get_mesh_shift())
+    elif settings.get_qpoints() is not None:
+        phonompy.set_qpoints(settings.get_qpoints())
+    elif settings.get_bands() is not None:
+        phonompy.set_band_path(settings.get_bands())
+
+    phonompy.get_linewidth(filename=options.output_filename)
+
+elif settings.get_is_bterta():
+    phonompy.get_thermal_conductivity(
+        grid_points=grid_points,
+        coarse_mesh_shifts=settings.get_coarse_mesh_shifts(),
+        no_kappa_stars=settings.get_no_kappa_stars(),
+        gv_delta_q=settings.get_group_velocity_delta_q(),
+        write_gamma=settings.get_write_gamma(),
+        read_gamma=settings.get_read_gamma(),
+        filename=options.output_filename)
+
+
+if log_level:
+    print_end(datetime.now())
