@@ -924,7 +924,7 @@ if run_mode=='gruneisen':
         gr.set_band_structure(band_paths)
     elif qpoints is not None:
         gr.set_qpoints(qpoints)
-    gr.run_at_sigma_and_temp()
+    gr.run()
     gr.write_yaml()
     if log_level:
         print_end()

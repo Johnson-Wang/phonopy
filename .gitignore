@@ -40,3 +40,9 @@ nosetests.xml
 .buildinfo
 .doctrees
 _build
+
+#temperary install
+csetup.py
+csetup3.py
+cmake2
+cmake3
