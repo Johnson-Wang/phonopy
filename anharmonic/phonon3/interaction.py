@@ -6,7 +6,7 @@ from phonopy.units import VaspToTHz
 from anharmonic.phonon3.real_to_reciprocal import RealToReciprocal
 from anharmonic.phonon3.reciprocal_to_normal import ReciprocalToNormal
 from anharmonic.phonon3.triplets import get_triplets_at_q_crude, get_BZ_triplets_at_q, get_nosym_triplets_at_q, \
-    get_kgp_index_at_grid, get_kpoint_group_c, reduce_triplets_by_permutation_symmetry, get_bz_grid_address, \
+    get_kgp_index_at_grid, get_kpoint_group, reduce_triplets_by_permutation_symmetry, get_bz_grid_address, \
     reduce_pairs_by_permutation_symmetry
 from anharmonic.file_IO import write_triplets_to_hdf5, read_amplitude_from_hdf5_all, read_amplitude_from_hdf5_at_grid,\
     write_amplitude_to_hdf5_at_grid, write_amplitude_to_hdf5_all
@@ -186,10 +186,10 @@ class Interaction:
         self._symmetry = Symmetry(primitive, symprec=symprec)
         if self._is_nosym:
             self._point_group_operations = np.array([np.eye(3)],dtype="intc")
-            self._kpoint_operations = get_kpoint_group_c(self._mesh, self._point_group_operations, is_time_reversal=False)
+            self._kpoint_operations = get_kpoint_group(self._mesh, self._point_group_operations, is_time_reversal=False)
         else:
             self._point_group_operations = self._symmetry.get_pointgroup_operations()
-            self._kpoint_operations = get_kpoint_group_c(self._mesh, self._point_group_operations)
+            self._kpoint_operations = get_kpoint_group(self._mesh, self._point_group_operations)
 
         if self.is_nosym():
             grid_mapping = np.arange(np.prod(self._mesh))

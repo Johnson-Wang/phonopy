@@ -5,7 +5,6 @@ from anharmonic.phonon3.triplets import get_bz_grid_address
 from anharmonic.phonon3.imag_self_energy import gaussian, occupation
 from phonopy.structure.tetrahedron_method import TetrahedronMethod
 from phonopy.phonon.tetrahedron_mesh import get_tetrahedra_frequencies
-from phonopy.structure.grid_points import GridPoints
 import phonopy.structure.spglib as spg
 from phonopy.structure.symmetry import Symmetry
 from phonopy.units import VaspToTHz

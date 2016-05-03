@@ -6,7 +6,7 @@ from phonopy.harmonic.force_constants import similarity_transformation
 from phonopy.units import THzToEv, EV, THz, Angstrom, kb_J
 from phonopy.phonon.thermal_properties import mode_cv as get_mode_cv
 from anharmonic.phonon3.triplets import get_grid_address, reduce_grid_points, get_ir_grid_points,\
-    from_coarse_to_dense_grid_points, get_kpoint_group_c, get_group_summation, get_group_inversion
+    from_coarse_to_dense_grid_points, get_kpoint_group, get_group_summation, get_group_inversion
 from anharmonic.other.isotope import CollisionIso
 from phonopy.structure.tetrahedron_method import TetrahedronMethod, TriagonalMethod
 unit_to_WmK = ((THz * Angstrom) ** 2 / (Angstrom ** 3) * EV / THz /
@@ -67,7 +67,7 @@ class Conductivity:
             self._mappings = np.arange(np.prod(self._mesh))
             self._rot_mappings = np.zeros(len(self._mappings), dtype="intc")
         else:
-            self._kpoint_operations = get_kpoint_group_c(self._mesh, self._pp.get_point_group_operations())
+            self._kpoint_operations = get_kpoint_group(self._mesh, self._pp.get_point_group_operations())
             (self._mappings, self._rot_mappings) =get_mappings(self._mesh,
                                             self._pp.get_point_group_operations(),
                                             qpoints=np.array([0,0,0],dtype="double"))

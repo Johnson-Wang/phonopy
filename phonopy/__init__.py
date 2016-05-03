@@ -900,6 +900,7 @@ class Phonopy:
         self._group_velocity = GroupVelocity(
             self._dynamical_matrix,
             q_points=q_points,
+            symmetry=self._symmetry,
             q_length=q_length,
             frequency_factor_to_THz=self._factor)
 

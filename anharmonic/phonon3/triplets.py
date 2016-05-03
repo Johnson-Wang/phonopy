@@ -483,16 +483,8 @@ def get_kgp_index_at_grid(grid, mesh, kpoint_operations, no_sym=False, symprec=1
     assert len(kpoint_operations) % len(kpt_operation) == 0 # requirement for subgroup
     return np.array(kpt_operation, dtype=np.int)
 
-def get_kpoint_group(mesh, point_operations):
-    m_diag=np.diag(mesh)
-    kpoint_operations= []
-    for  rot in point_operations:
-        rot_transform = np.dot(m_diag, np.dot(rot, np.linalg.inv(m_diag)))
-        if np.allclose(rot_transform, np.rint(rot_transform)):
-            kpoint_operations.append( np.rint(rot_transform))
-    return np.array(kpoint_operations, dtype=np.int)
 
-def get_kpoint_group_c(mesh, point_operations, qpoints = [[0., 0., 0.]], is_time_reversal=True):
+def get_kpoint_group(mesh, point_operations, qpoints = [[0., 0., 0.]], is_time_reversal=True):
     return spg.get_kpoint_group(mesh,  point_operations, qpoints, is_time_reversal)
 
 
