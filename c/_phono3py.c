@@ -691,20 +691,20 @@ static PyObject * py_get_isotope_strength(PyObject *self, PyObject *args)
   PyArrayObject* band_indices_py;
   PyArrayObject* mass_variances_py;
   PyArrayObject* occupations_py;
+  PyArrayObject* ir_grid_points_py;
   int grid_point;
-  int num_grid_points;
   double cutoff_frequency;
   double sigma;
 
-  if (!PyArg_ParseTuple(args, "OiOOOOOidd",
+  if (!PyArg_ParseTuple(args, "OiOOOOOOdd",
 			&collision_py,
 			&grid_point,
+			&ir_grid_points_py,
 			&mass_variances_py,
 			&frequencies_py,
 			&eigenvectors_py,
 			&band_indices_py,
 			&occupations_py,
-			&num_grid_points,
 			&sigma,
 			&cutoff_frequency)) {
     return NULL;
@@ -715,24 +715,25 @@ static PyObject * py_get_isotope_strength(PyObject *self, PyObject *args)
   const double* frequencies = (double*)frequencies_py->data;
   const lapack_complex_double* eigenvectors =
     (lapack_complex_double*)eigenvectors_py->data;
+  const int* ir_grid_points = (int*)ir_grid_points_py->data;
   const int* band_indices = (int*)band_indices_py->data;
   const double* mass_variances = (double*)mass_variances_py->data;
   const double* occupations = (double*) occupations_py->data;
   const int num_band = (int)frequencies_py->dimensions[1];
   const int num_band0 = (int)band_indices_py->dimensions[0];
-  const int num_t = (int) collision_py->dimensions[0];
+  const int num_grid_points = (int) collision_py->dimensions[0];
   
    get_isotope_scattering_strength(collision, 
   				  grid_point,
+  				  ir_grid_points,
   				  mass_variances,
   				  frequencies,
   				  eigenvectors,
-  				  num_grid_points,
   				  band_indices,
 				  occupations,
+  				  num_grid_points,
   				  num_band,
   				  num_band0,
-				  num_t,
   				  sigma,
   				  cutoff_frequency);
   

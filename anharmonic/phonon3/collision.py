@@ -301,7 +301,8 @@ class Collision():
         if self._collision_iso:
             self._collision_iso.set_frequencies(frequencies=self._frequencies_all,
                                                 eigenvectors=self._eigenvectors_all,
-                                                phonons_done=self._pp._phonon_done)
+                                                phonons_done=self._pp._phonon_done,
+                                                degeneracies=self._degeneracy_all)
 
 
     def reduce_triplets(self):
@@ -382,17 +383,16 @@ class Collision():
             self.run_py()
         if self._is_dispersed and self._write_col:
             self.write_collision_at_grid(self._grid_point)
-        self._collision_in *= self._unit_conversion # unit in Trad
+        self._collision_in *= self._unit_conversion # unit in THz
         summation = np.sum(self._collision_in, axis=-1)
         self._collision_out = np.dot(self._triplet_weights, summation) / 2.0
         if self._collision_iso is not None:
             self._collision_iso.run()
-            # self._collision_iso = CollisionIso()
             self._collision_out += self._collision_iso._collision_out
             self._collision_in += self._collision_iso._collision_in
 
         if self._length is not None:
-            bnd_collision_unit = 100. / 1e-6 / THz / (2 * np.pi) # unit in Trad, unit of length is micron
+            bnd_collision_unit = 100. / 1e-6 / THz / (2 * np.pi) # unit in THz, unit of length is micron
             dm = self._pp.get_dynamical_matrix()
             gv = get_group_velocity(self._qpoint,
                                     dm,

@@ -180,7 +180,7 @@ class TetrahedronMethod:
         else:
             iw = np.zeros(len(omegas), dtype='double')
             for i, omega in enumerate(omegas):
-                iw = self._get_integration_weight_py(omega, value=value)
+                iw[i] = self._get_integration_weight_py(omega, value=value)
         self._integration_weight = iw
 
     def _get_integration_weight_py(self, omega, value='I'):
@@ -204,6 +204,9 @@ class TetrahedronMethod:
             # else:
             #     i = 4
             v = self._vertices_omegas
+            if (np.abs(omega - v) < 1e-6).any():
+                omega = np.extract(np.abs(omega - v) < 1e-6, v)[0] - 1e-6
+                self._omega = omega
             if (omega < v[0]):
                 sum_value += IJ(0, np.where(indices==ci)[0][0]) * gn(0)
             elif (v[0] < omega and omega < v[1]):

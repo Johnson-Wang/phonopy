@@ -13,8 +13,8 @@ class Phono3pySettings(Settings):
         self._cutoff_frequency = 1e-2
         self._cutoff_hfrequency = None
         self._cutoff_lifetime = 1e-4 # in second
-        self._diff_kappa = 1e-4 # relative
-        self._diff_gamma = 1e-4 # relative
+        self._diff_kappa = 1e-5 # relative
+        self._diff_gamma = 1e-5 # relative
         self._grid_points = None
         self._ion_clamped = False
         self._is_ite=False

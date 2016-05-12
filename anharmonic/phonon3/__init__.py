@@ -557,7 +557,7 @@ class Phono3py:
                                  mesh_divisors=None,
                                  coarse_mesh_shifts=None,
                                  cutoff_lifetime=1e-4,  # in second
-                                 diff_kappa = 1e-3,  # in W/m-K
+                                 diff_kappa = 1e-5,  # relative
                                  is_nu=False,
                                  no_kappa_stars=False,
                                  gv_delta_q=1e-4,  # for group velocity
@@ -675,7 +675,7 @@ class Phono3py:
                       grid_points=None,
                       max_ite = None,
                       no_kappa_stars=False,
-                      diff_kappa = 1e-5, # unit: W/m-K
+                      diff_kappa = 1e-5, # relative difference
                       write_gamma=False,
                       read_gamma=False,
                       read_col=False,
@@ -734,7 +734,7 @@ class Phono3py:
                           grid_points=None,
                           max_ite = None,
                           no_kappa_stars=False,
-                          diff_kappa = 1e-4, # relative value
+                          diff_kappa = 1e-5, # relative value
                           write_gamma=False,
                           read_gamma=False,
                           read_col=False,
@@ -786,7 +786,6 @@ class Phono3py:
         self._gamma=bis._gamma
         self._kappa=bis._kappa
         bis.print_kappa()
-        # bis.print_kappa_rta()
 
 class Phono3pyIsotope:
     def __init__(self,
@@ -812,6 +811,7 @@ class Phono3pyIsotope:
                                 temperatures=temperatures,
                                 cutoff_frequency=cutoff_frequency,
                                 lapack_zheev_uplo=lapack_zheev_uplo)
+        self._temps = temperatures
 
     def run(self, grid_points):
         if grid_points is None:
@@ -821,29 +821,34 @@ class Phono3pyIsotope:
         for i,gp in enumerate(grid_points):
             process.progress_print(i)
             self._iso.set_grid_point(gp)
+            if self._iso._phonon_done is None:
+                self._iso._allocate_phonon()
             if self._log_level:
                 print "------ Isotope scattering ------"
                 print "Grid point: %d" % gp
 
             for j, sigma in enumerate(self._sigmas):
                 self._iso.set_sigma(sigma)
-                self._iso.run()
-                iso_gamma[j,i]=self._iso.get_gamma()
+                for k, temp in enumerate(self._temps):
+                    self._iso.set_temperature(temp)
+                    self._iso.run()
+                    iso_gamma[j,i,k]=self._iso.get_gamma()
                 #print self._iso.get_gamma()
 
         for j, sigma in enumerate(self._sigmas):
-
-            try:
+            if sigma is not None:
                 print "Mean isotope scattering rate at sigma=%f:"%sigma
-                print "%20s %20s" %("Temperature(K)", "Gamma (THz)")
-                for k, temp in enumerate(self._iso._temps):
-                    iso_ave = np.sum(np.dot(grid_weights, iso_gamma[j,:,k])) / grid_weights.sum()
-                    print "%20.2f %20.7e" %(temp, iso_ave)
-            except:
-                pass
+                filename = "iso_gamma-m%d%d%d-s%.2f.hdf5" %(tuple(self._iso._mesh)+(sigma,))
+            else:
+                print "Mean isotope scattering rate using Tetrahedra method"
+                filename = "iso_gamma-m%d%d%d.hdf5" %(tuple(self._iso._mesh))
+            print "%20s %20s" %("Temperature(K)", "Gamma (THz)")
+            for k, temp in enumerate(self._iso._temps):
+                iso_ave = np.sum(np.dot(grid_weights, iso_gamma[j,:,k])) / grid_weights.sum()
+                print "%20.2f %20.7e" %(temp, iso_ave)
             write_iso_scattering_to_hdf5(iso_gamma[j],
                                          temperatures=self._iso._temps,
-                                         filename="iso_gamma-m%d%d%d-s%.2f.hdf5" %(tuple(self._iso._mesh)+(sigma,)))
+                                         filename=filename)
 
 
 
