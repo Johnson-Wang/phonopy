@@ -133,7 +133,7 @@ class conductivity_ITE_CG(Conductivity):
     def run_smrt_sigma_adaption(self):
         asigma_step = 0
         while asigma_step <= self._max_asigma_step:
-            if self._collision.get_read_collision():
+            if self._collision.get_read_collision() and self._is_adaptive_sigma:
                 self._collision.set_write_collision(True)
             for s in range(len(self._sigmas)):
                 if (self._rkappa[s] < self._diff_kappa).all():
