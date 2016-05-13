@@ -258,10 +258,17 @@ class Interaction:
                 print "Triplets number to be calculated: %d/%d" %(len(unitrip_indices), len(self._interaction_strength))
 
             if self._is_read_amplitude:
-                self._interaction_strength[:] = \
+                amplitudes = \
                     read_amplitude_from_hdf5_at_grid(self._mesh, self._grid_point)
-                self.set_phonons(lang=lang)
-            else:
+                if amplitudes is not None:
+                    self._interaction_strength[:]  = amplitudes
+                    self.set_phonons(lang=lang)
+                else:
+                    print "Reading amplitude in the disperse mode unsuccessfully. Reverting to writing mode!"
+                    self._is_read_amplitude = False
+                    self._is_write_amplitude = True
+
+            if not self._is_read_amplitude:
                 self._interaction_strength_reduced = self._interaction_strength
                 self._triplets_at_q_reduced = self._triplets_at_q
                 if lang == 'C':

@@ -816,6 +816,8 @@ class Phono3pyIsotope:
     def run(self, grid_points):
         if grid_points is None:
             (grid_points,grid_weights,grid_address)=get_ir_grid_points(self._iso._mesh,self._primitive)
+        else:
+            grid_weights = None
         iso_gamma=np.zeros((len(self._sigmas), len(grid_points), len(self._iso._temps), len(self._iso._band_indices)), dtype="double")
         process = Progress_monitor(len(grid_points))
         for i,gp in enumerate(grid_points):
@@ -833,7 +835,6 @@ class Phono3pyIsotope:
                     self._iso.set_temperature(temp)
                     self._iso.run()
                     iso_gamma[j,i,k]=self._iso.get_gamma()
-                #print self._iso.get_gamma()
 
         for j, sigma in enumerate(self._sigmas):
             if sigma is not None:
@@ -842,14 +843,25 @@ class Phono3pyIsotope:
             else:
                 print "Mean isotope scattering rate using Tetrahedra method"
                 filename = "iso_gamma-m%d%d%d.hdf5" %(tuple(self._iso._mesh))
-            print "%20s %20s" %("Temperature(K)", "Gamma (THz)")
-            for k, temp in enumerate(self._iso._temps):
-                iso_ave = np.sum(np.dot(grid_weights, iso_gamma[j,:,k])) / grid_weights.sum()
-                print "%20.2f %20.7e" %(temp, iso_ave)
-            write_iso_scattering_to_hdf5(iso_gamma[j],
-                                         temperatures=self._iso._temps,
-                                         filename=filename)
 
+            if grid_weights is not None:
+                print "%20s %20s" %("Temperature(K)", "Gamma (THz)")
+                for k, temp in enumerate(self._iso._temps):
+                    iso_ave = np.sum(np.dot(grid_weights, iso_gamma[j,:,k])) / grid_weights.sum()
+                    print "%20.2f %20.7e" %(temp, iso_ave)
+                write_iso_scattering_to_hdf5(iso_gamma[j],
+                                             mesh=self._iso._mesh,
+                                             temperatures=self._iso._temps,
+                                             sigma=sigma,
+                                             filename=filename)
+            else: # Grid-point mode
+                for k, temp in enumerate(self._iso._temps):
+                    print "T=%.2f" %temp
+                    for i,gp in enumerate(grid_points):
+                        print "  Grid-point: %d" %gp
+                        print  "    %-20s %-20s" %("Frequency (THz)", "Gamma (THz)")
+                        for l in np.arange(self._iso._frequencies.shape[-1]):
+                            print "    %-20.4f %-20.4e" %(self._iso._frequencies[gp, l], iso_gamma[j, i, k, l])
 
 
                 

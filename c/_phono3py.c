@@ -36,6 +36,7 @@ static PyObject * py_collision(PyObject *self, PyObject *args);
 static PyObject * py_collision_all_permute(PyObject *self, PyObject *args);
 static PyObject * py_collision_from_reduced(PyObject *self, PyObject *args);
 static PyObject * py_collision_degeneracy(PyObject *self, PyObject *args);
+static PyObject * py_collision_degeneracy_grid(PyObject *self, PyObject *args);
 static PyObject * py_get_neighboring_gird_points(PyObject *self, PyObject *args);
 static PyObject *py_interaction_from_reduced(PyObject *self, PyObject *args);
 static PyObject * py_perturbation_next(PyObject *self, PyObject *args);
@@ -87,6 +88,7 @@ static PyMethodDef functions[] = {
   {"collision_all_permute", py_collision_all_permute, METH_VARARGS, "Scattering rate calculation for all phonons in a triplet" },
   {"collision_from_reduced", py_collision_from_reduced, METH_VARARGS, "Scattering rate from reduced triplets" },
   {"collision_degeneracy", py_collision_degeneracy, METH_VARARGS, "Scattering rate symmetrization considering the degeneracy" },
+  {"collision_degeneracy_grid", py_collision_degeneracy_grid, METH_VARARGS, "Scattering rate symmetrization at a grid considering the degeneracy" },
   {"interaction_from_reduced", py_interaction_from_reduced, METH_VARARGS, "interaction strength from reduced triplets" },
   {"perturbation_next", py_perturbation_next, METH_VARARGS, "Calculate the next perturbation flow"},
   {"thermal_conductivity_at_grid",py_get_thermal_conductivity_at_grid, METH_VARARGS, "thermal conductivity calculation at a grid point" },
@@ -1017,6 +1019,29 @@ static PyObject *py_collision_degeneracy(PyObject *self, PyObject *args)
   double *scatt=(double*)py_scatt->data;
   
   collision_degeneracy(scatt,triplet_degeneracy, num_triplet, num_band);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_collision_degeneracy_grid(PyObject *self, PyObject *args)
+{
+  PyArrayObject *py_scatt;
+  PyArrayObject *py_degeneracies_all;
+  PyArrayObject *py_grid_points2;
+  double grid_point;
+
+
+  if (!PyArg_ParseTuple(args, "OOOi",
+			&py_scatt,
+			&py_degeneracies_all,
+			&py_grid_points2,
+			&grid_point))
+    return NULL;
+  const int num_grid_points2 = (int)py_grid_points2->dimensions[0];
+  const int num_band = (int) py_scatt->dimensions[2];
+  const int *degeneracies_all = (int*)py_degeneracies_all->data;
+  const int *grid_points2 = (int *)py_grid_points2->data;
+  double *scatt=(double*)py_scatt->data;
+  collision_degeneracy_grid(scatt,degeneracies_all, grid_point, grid_points2, num_grid_points2, num_band);
   Py_RETURN_NONE;
 }
 

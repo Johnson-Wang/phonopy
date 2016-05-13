@@ -764,8 +764,17 @@ def write_kappa(kappa,
     w.close()
 
 def write_iso_scattering_to_hdf5(gamma_iso,
+                                 mesh=None,
                                  temperatures=None,
-                                 filename="gamma_iso.hdf5"):
+                                 sigma=None,
+                                 filename=None):
+    if filename is None:
+        filename = "Isotope"
+    if mesh is not None:
+        filename += "-m%d%d%d"%tuple(mesh)
+    if sigma is not None:
+        filename += "-s%.2f"%sigma
+    filename += ".hdf5"
     w=h5py.File(filename, "w")
     if temperatures is not None:
         w.create_dataset("temperature", data=temperatures)
@@ -1378,6 +1387,7 @@ def read_amplitude_from_hdf5_at_grid(mesh, grid, path = None, is_nosym = False):
         path = "_phonon3_amplitude-m%d%d%d"%tuple(mesh)
     path = os.path.join(path, filename)
     if not os.path.isfile(path):
+        print "Warning! path %s does not exist"%path
         return None
     f = h5py.File(path, "r")
     amplitude = f['amplitude'][:]

@@ -33,6 +33,8 @@ class CollisionIso:
                  temperatures=None,
                  symprec=1e-5,
                  cutoff_frequency=None,
+                 is_write_collision=False,
+                 is_read_collision=False,
                  lapack_zheev_uplo='L',
                  is_nosym=False):
         self._mesh = np.array(mesh, dtype='intc')
@@ -64,6 +66,8 @@ class CollisionIso:
         self._tetrahedron_method = None
         self._is_extra_frequency = False
         self._is_nosym = is_nosym
+        self._is_read_col = is_read_collision
+        self._is_write_col = is_write_collision
         
     def set_grid_point(self,
                        grid_point,
@@ -89,12 +93,15 @@ class CollisionIso:
                                                                       qpoints=[qpoint])
 
             grid_points2 = np.unique(mapping)
-            weight = np.zeros_like(grid_points2)
-            bz_grid_points2 = np.zeros_like(grid_points2)
-            for g, grid in enumerate(grid_points2):
-                weight[g] = len(np.where(grid == mapping)[0])
-                bz_grid_points2[g] = np.where(grid == self._bz_to_pp_map)[0][0]
-            self._grid_points2 = bz_grid_points2
+            # weight = np.zeros_like(grid_points2)
+            # bz_grid_points2 = np.zeros_like(grid_points2)
+            # for g, grid in enumerate(grid_points2):
+            #     weight[g] = len(np.where(grid == mapping)[0])
+            #     bz_grid_points2[g] = np.where(grid == self._bz_to_pp_map)[0][0]
+            # self._grid_points2 = bz_grid_points2
+            weight_temp = np.bincount(mapping)
+            weight = weight_temp[np.nonzero(weight_temp)]
+            self._grid_points2 = grid_points2
             self._weights2 = weight
         else:
             self._grid_points2 = np.arange(np.prod(self._mesh))
@@ -229,7 +236,22 @@ class CollisionIso:
                                      self._occupations.astype("double").copy(),
                                      self._sigma,
                                      self._cutoff_frequency)
-
+        # considering degeneracy
+        # for ubi in np.unique(self._degeneracies[self._grid_point]):
+        #     deg_index = np.where(self._degeneracies[self._grid_point] == ubi)[0]
+        #     ave = np.average(self._collision_in[:, deg_index], axis=1)
+        #     for bi0 in deg_index:
+        #         self._collision_in[:, bi0] = ave
+        #     for gp2 in self._grid_points2:
+        #         for ubj in np.unique(self._degeneracies[gp2]):
+        #             deg_index2 = np.where(self._degeneracies[gp2] == ubj)[0]
+        #             ave2 = np.average(self._collision_in[:, :, deg_index2], axis=2)
+        #             for bi1 in deg_index2:
+        #                 self._collision_in[:, :, bi1] = ave2
+        phono3c.collision_degeneracy_grid(self._collision_in,
+                                          self._degeneracies.astype('intc').copy(),
+                                          self._grid_points2.astype('intc').copy(),
+                                          self._grid_point)
         self._collision_in *= np.pi / 2 / np.prod(self._mesh) # unit in THz
         self._collision_out = np.dot(weights, self._collision_in.sum(axis=-1))
         # conversion: (2 * pi) ** 2 / (2 * pi) / (2 * pi)
@@ -257,21 +279,21 @@ class CollisionIso:
             len(unique_vertices) * len(self._grid_points2), dtype='intc')
         phono3c.neighboring_grid_points(
             neighboring_grid_points,
-            self._grid_points2,
-            unique_vertices,
-            self._mesh,
-            self._grid_address,
-            self._bz_map)
+            self._grid_points2.astype("intc").copy(),
+            unique_vertices.astype("intc").copy(),
+            self._mesh.astype("intc").copy(),
+            self._grid_address.astype("intc").copy(),
+            self._bz_map.astype("intc").copy())
         self._set_phonon_c(np.unique(neighboring_grid_points))
         freq_points = np.array(
             self._frequencies[self._grid_point, self._band_indices] + infinitesmal,
             dtype='double', order='C')
         phono3c.integration_weights(
             self._integration_weights,
-            freq_points,
+            freq_points.astype("double").copy(),
             thm.get_tetrahedra(),
-            self._mesh,
-            self._grid_points2,
+            self._mesh.astype("intc").copy(),
+            self._grid_points2.astype("intc").copy(),
             self._frequencies,
             self._grid_address,
             self._bz_map)
@@ -373,6 +395,6 @@ class CollisionIso:
                                       dtype='complex128')
         self._occupation_done = np.zeros(num_grid, dtype='byte')
         self._occupations = np.zeros((num_grid, num_band), dtype="double")
-        self._degeneracies = np.zeros_like(self._frequencies, dtype="intc") + np.arange(num_band)
+        self._degeneracies = (np.zeros_like(self._frequencies) + np.arange(num_band)).astype("intc")
 
         

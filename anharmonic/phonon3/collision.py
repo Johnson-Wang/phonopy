@@ -115,7 +115,7 @@ class Collision():
 
             self._fc3_normal_squared = None
             if self._collision_iso is not None:
-                grid_points2 = self.get_grid_point_triplets()[:,1]
+                grid_points2 = self.get_grid_point_triplets()[:,1].astype("intc").copy()
                 weights2 = self.get_triplets_weights()
                 self._collision_iso.set_grid_point(grid_point, grid_points2=grid_points2, weights2=weights2)
 
@@ -342,6 +342,7 @@ class Collision():
         for g in uniq_grids:
             if not self._n_done[g, self._itemp]:
                 n = occupation(self._frequencies_all[g], self._temperature)
+                n[np.where(self._frequencies_all[g]<self._cutoff_frequency)] = 0
                 self._occupations_all[g, self._itemp] = n
                 self._n_done[g, self._itemp] = True
         if self._collision_iso is not None:
@@ -383,11 +384,12 @@ class Collision():
             self.run_py()
         if self._is_dispersed and self._write_col:
             self.write_collision_at_grid(self._grid_point)
-        self._collision_in *= self._unit_conversion # unit in THz
+        # self._collision_in *= self._unit_conversion # unit in THz
         summation = np.sum(self._collision_in, axis=-1)
         self._collision_out = np.dot(self._triplet_weights, summation) / 2.0
         if self._collision_iso is not None:
             self._collision_iso.run()
+
             self._collision_out += self._collision_iso._collision_out
             self._collision_in += self._collision_iso._collision_in
 
@@ -424,6 +426,7 @@ class Collision():
                 self._collision_in[i,j,k] += self._fc3_normal_squared[i,j,k,l] * ((n0 + 1) * n1 * n2 * delta3 +
                                                                                       (n1 + 1) * n0 * n2 * delta2 +
                                                                                       (n2 + 1) * n0 * n1 * delta1)
+        self._collision_in *= self._unit_conversion
 
     def set_integration_weights(self):
         f_points = self._frequencies_all[self._grid_point][self._band_indices]
@@ -455,6 +458,7 @@ class Collision():
                                                 self._frequencies_reduced.copy(),
                                                 self._g.copy(),
                                                 self._cutoff_frequency)
+            self._collision_in_reduced *= self._unit_conversion # unit in THz
             phono3c.collision_degeneracy(self._collision_in_reduced,
                                                np.intc(self._degeneracy_reduced).copy())
             self._collision_in_all[self._undone_uniq_index] = self._collision_in_reduced[:]
@@ -471,6 +475,7 @@ class Collision():
                               self._g.copy(),
                               self._temperature,
                               self._cutoff_frequency)
+            self._collision_in *= self._unit_conversion # unit in THz
 
 
 

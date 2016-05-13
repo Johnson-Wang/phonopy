@@ -34,7 +34,12 @@ void collision_degeneracy(double *scatt,
 				const int *triplet_degeneracy, 
 				const int num_triplet, 
 				const int num_band);
-
+void collision_degeneracy_grid(double *scatt,
+				const int *degeneracy,
+				const int grid_point,
+				const int *grid_points2,
+				const int num_grid_points2,
+				const int num_band);
 void get_interaction_from_reduced(double *interaction, 
 				  const double *interaction_all,
 				  const int *triplet_mapping,

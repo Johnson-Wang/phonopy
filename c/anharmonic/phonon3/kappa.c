@@ -404,6 +404,80 @@ void collision_degeneracy(double *scatt,
   }
 }
 
+void collision_degeneracy_grid(double *scatt,
+				const int *degeneracy,
+				const int grid_point,
+				const int *grid_points2,
+				const int num_grid_points2,
+				const int num_band)
+{
+  int i, k, l, m, ndeg, *deg;
+  const int nbb = num_band * num_band;
+  double scatt_temp[num_band], deg0[num_band];
+  //The frog jump algorithm for the degeneracy.
+
+  for (i=0; i<num_band; i++)
+      deg0[i] = degeneracy[grid_point * num_band + i];
+//  #pragma omp parallel for private(i,k, l, m, ndeg, deg, scatt_temp)
+  for (i = 0; i < num_grid_points2; i++) // i: grid2 index
+  {
+      //k is the index for the position of the current frog
+
+      k = 0;
+      while(k<num_band)
+      {
+	     //Initialization for scatt_temp
+        for (m = 0; m < num_band; m++)
+          scatt_temp[m] = 0;
+        // find the length of bands to skip and sum all the values in another vector
+        for (l = k; l < num_band; l++)
+        {
+          if (deg0[l] == k) // the lth band and the kth band are degenerate
+            for (m = 0; m < num_band; m++)
+              scatt_temp[m] += scatt[i * nbb + l * num_band + m];
+          else
+            break;
+        }
+        ndeg = l - k; // number of degenerate states
+
+        //Take the average of the degenerate states
+        for (m = 0; m < num_band; m++)
+          scatt_temp[m] /= ndeg;
+
+        //assign the new value of scatt
+        for (l = k; l < k + ndeg; l++)
+          for (m = 0; m < num_band; m++)
+            scatt[i * nbb + l * num_band + m] = scatt_temp[m];
+        k += ndeg;
+      }
+      //Repeate the last step but for another axis
+      deg = degeneracy + grid_points2[i] * num_band;  //second phonon
+      k = 0;
+      while(k<num_band)
+      {
+	    //Initialization for scatt_temp
+        for (m = 0; m < num_band; m++)
+          scatt_temp[m] = 0;
+
+        for (l = k; l < num_band; l++)
+        {
+          if (deg[l] == k)
+            for (m = 0; m < num_band; m++)
+              scatt_temp[m] += scatt[i * nbb + m * num_band + l];
+          else
+            break;
+        }
+        ndeg = l - k;
+        for (m = 0; m < num_band; m++)
+          scatt_temp[m] /= ndeg;
+        for (l = k; l < k + ndeg; l++)
+          for (m = 0; m < num_band; m++)
+            scatt[i * nbb + m * num_band + l] = scatt_temp[m];
+        k += ndeg;
+      }
+  }
+}
+
 void  get_next_perturbation_at_all_bands(double *summation,
 					 const double *F_prev,
 					 const double *scatt,
