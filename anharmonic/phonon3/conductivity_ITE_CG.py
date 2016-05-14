@@ -388,7 +388,7 @@ class conductivity_ITE_CG(Conductivity):
                 dkappa_max = np.abs(self.get_kappa_residual_at_s_t(s, t)).max()
                 kappa = self.get_kappa()[s, :, t]
                 dkappa_max /= kappa.sum(axis=(0,1)).max()
-                print "Relative residual kappa for T=%f K is %10.5e" % (temp, dkappa_max)
+                print "Relative residual kappa for T=%.2f K is %10.5e" % (temp, dkappa_max)
                 is_converge=(dkappa_max < self._diff_kappa)
                 self._is_converge[s,t]= is_converge
                 if is_converge:

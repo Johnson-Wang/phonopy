@@ -157,7 +157,7 @@ class conductivity_ITE(Conductivity):
                 dkappa_max = np.abs(self.get_kappa_residual_at_s_t(s, t)).max()
                 kappa = self.get_kappa()[s, :, t]
                 dkappa_max /= kappa.sum(axis=(0,1)).max()
-                print "Relative residual kappa for T=%f K is %10.5e" % (temp, dkappa_max)
+                print "Relative residual kappa for T=%.2f K is %10.5e" % (temp, dkappa_max)
                 is_converge=(dkappa_max < self._diff_kappa)
                 self._is_converge[s,t]= is_converge
                 if is_converge:
@@ -188,7 +188,7 @@ class conductivity_ITE(Conductivity):
     def run_smrt_sigma_adaption(self):
         asigma_step = 0
         while asigma_step <= self._max_asigma_step:
-            if self._collision.get_read_collision():
+            if self._collision.get_read_collision()  and self._is_adaptive_sigma:
                 self._collision.set_write_collision(True)
             for s in range(len(self._sigmas)):
                 if (self._rkappa[s] < self._diff_kappa).all():
@@ -218,7 +218,8 @@ class conductivity_ITE(Conductivity):
                         self.print_calculation_progress(g)
                     if asigma_step == 0 and (not self._is_read_col):
                         self._pp.write_amplitude_all()
-                    self._collision.write_collision_all(log_level=self._log_level, is_adaptive_sigma=self._is_adaptive_sigma)
+                    if not self._collision.get_is_dispersed():
+                        self._collision.write_collision_all(log_level=self._log_level, is_adaptive_sigma=self._is_adaptive_sigma)
                 self.set_kappa_at_sigma(s)
             self.print_kappa()
             asigma_step += 1
