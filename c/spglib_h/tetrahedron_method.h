@@ -19,4 +19,13 @@ thm_get_integration_weight_at_omegas(double *integration_weights,
 				     SPGCONST double tetrahedra_omegas[24][4],
 				     const char function);
 
+double thm_get_integration_weight_1D(const double omega,
+				  SPGCONST double tetrahedra_omegas[2][2],
+				  const char function);
+void
+thm_get_integration_weight_at_omegas_1D(double *integration_weights,
+				     const int num_omegas,
+				     const double *omegas,
+				     SPGCONST double tetrahedra_omegas[2][2],
+				     const char function);
 #endif

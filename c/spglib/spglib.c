@@ -1320,3 +1320,28 @@ spg_get_tetrahedra_integration_weight_at_omegas
 				       tetrahedra_omegas,
 				       function);
 }
+
+double
+spg_get_tetrahedra_integration_weight_1D(const double omega,
+				      SPGCONST double tetrahedra_omegas[2][2],
+				      const char function)
+{
+  return thm_get_integration_weight_1D(omega,
+				    tetrahedra_omegas,
+				    function);
+}
+
+void
+spg_get_tetrahedra_integration_weight_at_omegas_1D
+(double integration_weights[],
+ const int num_omegas,
+ const double omegas[],
+ SPGCONST double tetrahedra_omegas[2][2],
+ const char function)
+{
+  thm_get_integration_weight_at_omegas_1D(integration_weights,
+				       num_omegas,
+				       omegas,
+				       tetrahedra_omegas,
+				       function);
+}

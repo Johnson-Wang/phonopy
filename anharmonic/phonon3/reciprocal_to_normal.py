@@ -19,22 +19,24 @@ class ReciprocalToNormal:
         self._fc3_normal = None
         self._fc3_reciprocal = None
 
-    def run(self, fc3_reciprocal, grid_triplet):
+    def run(self, fc3_reciprocal, grid_triplet, g_skip=None):
         num_band = self._primitive.get_number_of_atoms() * 3
         self._fc3_reciprocal = fc3_reciprocal
         self._fc3_normal = np.zeros((num_band,) * 3, dtype='double')
-        self._reciprocal_to_normal(grid_triplet)
+        self._reciprocal_to_normal(grid_triplet, g_skip=g_skip)
 
     def get_reciprocal_to_normal(self):
         return self._fc3_normal
 
-    def _reciprocal_to_normal(self, grid_triplet):
+    def _reciprocal_to_normal(self, grid_triplet, g_skip=None):
         e1, e2, e3 = self._eigenvectors[grid_triplet]
         f1, f2, f3 = self._frequencies[grid_triplet]
         num_band = len(f1)
         cutoff = self._cutoff_frequency
         sum_sequence = (np.ones((3,3))-2*np.eye(3))
         for (i, j, k) in list(np.ndindex((num_band,) * 3)):
+            if g_skip[i,j,k]:
+                continue
             if f1[i] > cutoff  and f1[i] < self._cutoff_hfrequency \
                 and f2[j] > cutoff and f3[k] > cutoff:
                 f=self._frequencies[grid_triplet]

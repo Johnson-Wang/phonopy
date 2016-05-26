@@ -244,24 +244,23 @@ class Interaction:
     def get_amplitude_all(self):
         return self._amplitude_all
 
-    def run(self, lang='C', log_level=0):
+    def run(self, g_skip=None, lang='C', log_level=0):
         num_band = self._primitive.get_number_of_atoms() * 3
         num_triplets = len(self._triplets_at_q)
         self._interaction_strength = np.zeros(
             (num_triplets, len(self._band_indices), num_band, num_band),
             dtype='double')
         if self._is_dispersed:
-            unitrip_indices = self._uniq_index_disperse
-            mapping = self._triplets_map_disperse
-            triplets_sequence = self._triplet_sequence_disperse
+            unitrip_indices = self._triplets_uniq_index_at_grid
+            mapping = self._triplets_maping_at_grid
+            triplets_sequence = self._triplet_sequence_at_grid
             if log_level>0:
                 print "Triplets number to be calculated: %d/%d" %(len(unitrip_indices), len(self._interaction_strength))
 
             if self._is_read_amplitude:
-                amplitudes = \
+                self._interaction_strength_reduced = \
                     read_amplitude_from_hdf5_at_grid(self._mesh, self._grid_point)
-                if amplitudes is not None:
-                    self._interaction_strength[:]  = amplitudes
+                if self._interaction_strength_reduced is not None:
                     self.set_phonons(lang=lang)
                 else:
                     print "Reading amplitude in the disperse mode unsuccessfully. Reverting to writing mode!"
@@ -269,12 +268,33 @@ class Interaction:
                     self._is_write_amplitude = True
 
             if not self._is_read_amplitude:
-                self._interaction_strength_reduced = self._interaction_strength
-                self._triplets_at_q_reduced = self._triplets_at_q
+                self._interaction_strength_reduced = np.zeros(
+                    (len(self._triplets_uniq_index_at_grid), len(self._band_indices), num_band, num_band),
+                    dtype='double')
+                self._triplets_at_q_reduced = self._triplets_at_q[unitrip_indices].copy()
+                if g_skip is None:
+                    g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
                 if lang == 'C':
-                    self._run_c()
+                    self._run_c(g_skip=g_skip)
                 else:
-                    self._run_py()
+                    self._run_py(g_skip=g_skip)
+
+            import anharmonic._phono3py as phono3c
+            phono3c.interaction_from_reduced(self._interaction_strength,
+                                         self._interaction_strength_reduced.astype("double").copy(),
+                                         mapping.astype("intc"),
+                                         triplets_sequence.astype("byte"))
+            #debugging
+            # interaction_strength = self._interaction_strength.copy()
+            # interaction_strength_reduced = self._interaction_strength_reduced.copy()
+            # self._interaction_strength_reduced = np.zeros(
+            #         (len(self._triplets_at_q), len(self._band_indices), num_band, num_band),
+            #         dtype='double')
+            # self._triplets_at_q_reduced = self._triplets_at_q
+            # self._run_c()
+            # self._interaction_strength = self._interaction_strength_reduced.copy()
+            # print np.abs(self._interaction_strength_reduced - interaction_strength).max() / self._interaction_strength_reduced.max(),
+            # print np.unravel_index(np.abs(self._interaction_strength_reduced - interaction_strength).argmax(), self._interaction_strength_reduced.shape)
 
             if self._is_write_amplitude:
                 write_amplitude_to_hdf5_at_grid(self._mesh, grid=self._grid_point, amplitude=self._interaction_strength_reduced)
@@ -299,6 +319,8 @@ class Interaction:
                 self._interaction_strength_reduced = np.zeros(
                     (len(self._triplets_at_q_reduced), len(self._band_indices), num_band, num_band),
                     dtype='double')
+                # if g_skip is None:
+                #     g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
                 if lang == 'C':
                     self._run_c()
                 else:
@@ -310,7 +332,7 @@ class Interaction:
                                                  self._triplets_mappings[self._i].astype("intc"),
                                                  self._triplets_sequence[self._i].astype("byte"))
                 self._triplets_done[undone_num] = True
-                del self._interaction_strength_reduced
+
 
     def set_phonons(self, grid_points=None, lang = "C"):
         if lang == "C":
@@ -351,10 +373,10 @@ class Interaction:
         return self._triplets_at_q, self._weights_at_q
 
     def get_triplets_sequence_at_q_disperse(self):
-        return self._triplet_sequence_disperse
+        return self._triplet_sequence_at_grid
 
     def get_triplets_mapping_at_q_disperse(self):
-        return self._triplets_map_disperse
+        return self._triplets_maping_at_grid
 
     def get_triplets_at_q_nu(self):
         triplet_address = self.get_triplet_address()
@@ -408,18 +430,18 @@ class Interaction:
         return self._kpg_at_qs_index[self._i]
 
     def get_triplets_mapping_at_grid(self):
-        return self._triplets_mappings[self._i]
+        if not self._is_dispersed:
+            return self._triplets_mappings[self._i]
+        else:
+            return self._triplets_maping_at_grid
 
     def get_triplets_sequence_at_grid(self):
         return self._triplets_sequence[self._i]
 
     def set_grid_point(self, grid_point, i=None, stores_triplets_map=False):
         if i==None:
-            for i, g in enumerate(self._grid_points):
-                if g == grid_point:
-                    self._i = i
-                    self._grid_point = grid_point
-                    break
+            self._grid_point = grid_point
+            self._i = np.where(grid_point == self._grid_points)[0][0]
         else:
             self._i = i
             self._grid_point = self._grid_points[i]
@@ -441,9 +463,9 @@ class Interaction:
                      reciprocal_lattice,
                      stores_triplets_map=stores_triplets_map)
                 if self._is_dispersed:
-                    self._uniq_index_disperse = np.arange(len(triplets_at_q), dtype="intc")
-                    self._triplets_map_disperse = np.arange(len(triplets_at_q), dtype="intc")
-                    self._triplet_sequence_disperse = np.arange(3, dtype="intc")[np.newaxis].repeat(len(triplets_at_q))
+                    self._triplets_uniq_index_at_grid = np.arange(len(triplets_at_q), dtype="intc")
+                    self._triplets_maping_at_grid = np.arange(len(triplets_at_q), dtype="intc")
+                    self._triplet_sequence_at_grid = np.arange(3, dtype="intc")[np.newaxis].repeat(len(triplets_at_q))
 
             else:
                 (triples_at_q_crude,
@@ -466,37 +488,34 @@ class Interaction:
                                                                 first_mapping=self._grid_mapping,
                                                                 first_rotation=self._kpoint_operations[self._grid_mapping_rot],
                                                                 second_mapping=np.array([grid_map]))
-                    self._uniq_index_disperse = unique_triplet_nums
-                    self._triplets_map_disperse = triplets_mappings
-                    self._triplet_sequence_disperse = triplet_sequence
-            for triplet in triplets_at_q:
-                sum_q = (bz_grid_address[triplet]).sum(axis=0)
-                if (sum_q % self._mesh != 0).any():
-                    print "============= Warning =================="
-                    print triplet
-                    for tp in triplet:
-                        print grid_address[tp],
-                        print np.linalg.norm(
-                            np.dot(reciprocal_lattice,
-                                   grid_address[tp] / self._mesh))
-                    print sum_q
-                    print "============= Warning =================="
+                    self._triplets_uniq_index_at_grid = unique_triplet_nums
+                    self._triplets_maping_at_grid = triplets_mappings[0]
+                    self._triplet_sequence_at_grid = triplet_sequence[0]
+
+            sum_qs = bz_grid_address[triplets_at_q].sum(axis=1)
+            resi = sum_qs % self._mesh
+            if (resi != 0).any():
+                triplets = triplets_at_q[np.where(resi != 0)[0]]
+                print "============= Warning =================="
+                print triplets
+                print sum_qs
+                print "============= Warning =================="
+            # for triplet in triplets_at_q:
+            #     sum_q = (bz_grid_address[triplet]).sum(axis=0)
+            #     if (sum_q % self._mesh != 0).any():
+            #         print "============= Warning =================="
+            #         print triplet
+            #         for tp in triplet:
+            #             print grid_address[tp],
+            #             print np.linalg.norm(
+            #                 np.dot(reciprocal_lattice,
+            #                        grid_address[tp] / self._mesh))
+            #         print sum_q
+            #         print "============= Warning =================="
 
             self._triplets_at_q = triplets_at_q
             self._weights_at_q = weights_at_q
             self._ir_map_at_q = grid_map
-        # if self._is_dispersed:
-        #     # The sequence rule: root[seq] = leaf
-        #     uniq_index_disperse = self._uniq_index_disperse
-        #     triplets_map_disperse = self._triplets_map_disperse
-        #     triplets_sequence = np.zeros((len(self._triplets_at_q), 3), dtype="byte")
-        #     current_triplets_sequence = self._triplet_sequence_disperse
-        #     for i in np.arange(len(self._triplets_at_q)):
-        #         root_seq = current_triplets_sequence[uniq_index_disperse[triplets_map_disperse[i]]]
-        #         assert (root_seq == np.arange(3)).all()
-        #         leaf_seq = current_triplets_sequence[i]
-        #         triplets_sequence[i] = find_index(root_seq, leaf_seq)
-        #     self._triplet_sequence_disperse = triplets_sequence
 
     def set_grid_points(self, grid_points):
         self._grid_points = grid_points
@@ -588,13 +607,6 @@ class Interaction:
                                                     first_rotation=self._kpoint_operations[self._grid_mapping_rot],
                                                     second_mapping=np.vstack(second_mappings))
 
-            # crude_pairs = [np.array(tatq)[:,:2] for tatq in crude_triplets]
-            # uniq_pairs_num, pair_mappings, pair_sequence = reduce_pairs_by_permutation_symmetry(crude_pairs,
-            #                                         self._mesh,
-            #                                         first_mapping=grid_mapping,
-            #                                         first_rotation=self._kpoint_operations[grid_mapping_rots],
-            #                                         second_mapping=np.vstack(second_mappings))
-
             print "Number of total unique triplets after permutation symmetry: %d/ %d" %(len(unique_triplet_num), total_triplet_num)
             # print "Number of total unique pairs after permutation symmetry: %d/%d" %(len(uniq_pairs_num), total_triplet_num)
 
@@ -654,8 +666,12 @@ class Interaction:
         if nac_q_direction is not None:
             self._nac_q_direction = np.double(nac_q_direction)
 
-    def _run_c(self):
+    def _run_c(self, g_skip=None):
         import anharmonic._phono3py as phono3c
+        if g_skip is None:
+            g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
+        else:
+            assert g_skip.shape == self._interaction_strength_reduced.shape
 
         self._set_phonon_c()
         svecs, multiplicity = get_smallest_vectors(self._supercell,
@@ -675,6 +691,7 @@ class Interaction:
                             self._fc3,
                             atc,
                             atc_rec,
+                            g_skip,
                             svecs,
                             multiplicity,
                             np.double(masses),
@@ -701,7 +718,6 @@ class Interaction:
             born = None
             nac_factor = 0
             dielectric = None
-
         if grid_points == None:
             phono3c.phonon_triplets(self._frequencies,
                                     self._eigenvectors,
@@ -736,7 +752,11 @@ class Interaction:
                          self._nac_q_direction,
                          self._lapack_zheev_uplo)
 
-    def _run_py(self):
+    def _run_py(self, g_skip=None):
+        if g_skip is None:
+            g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
+        else:
+            assert g_skip.shape == self._interaction_strength_reduced.shape
         r2r = RealToReciprocal(self._fc3,
                                self._supercell,
                                self._primitive,
@@ -751,13 +771,13 @@ class Interaction:
                                  cutoff_hfrequency=self._cutoff_hfrequency,
                                  cutoff_delta=self._cutoff_delta)
 
-        for i, grid_triplet in enumerate(self._triplets_at_q):
-            print "%d / %d" % (i + 1, len(self._triplets_at_q))
+        for i, grid_triplet in enumerate(self._triplets_at_q_reduced):
+            print "%d / %d" % (i + 1, len(self._triplets_at_q_reduced))
             r2r.run(self._grid_address[grid_triplet])
             fc3_reciprocal = r2r.get_fc3_reciprocal()
             for gp in grid_triplet:
                 self._set_phonon_py(gp)
-            r2n.run(fc3_reciprocal, grid_triplet)
+            r2n.run(fc3_reciprocal, grid_triplet, g_skip = g_skip[i])
             self._interaction_strength_reduced[i] = r2n.get_reciprocal_to_normal()
 
     def _set_phonon_py(self, grid_point):

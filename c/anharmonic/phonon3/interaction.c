@@ -22,7 +22,8 @@ static void real_to_normal(double *fc3_normal_squared,
 			   const lapack_complex_double *eigvecs2,
 			   const Darray *fc3,
 			   const int *atc,
-                           const int * atc_rec,
+               const int * atc_rec,
+               const char* g_skip,
 			   const double q[9], /* q0, q1, q2 */
 			   const Darray *shortest_vectors,
 			   const Iarray *multiplicity,
@@ -40,7 +41,8 @@ static void real_to_normal_sym_q(double *fc3_normal_squared,
 				 lapack_complex_double *eigvecs[3],
 				 const Darray *fc3,
 				 const int *atc,
-                                 const int *atc_rec,
+                 const int *atc_rec,
+                 const char* g_skip,
 				 const double q[9], /* q0, q1, q2 */
 				 const Darray *shortest_vectors,
 				 const Iarray *multiplicity,
@@ -116,8 +118,9 @@ void get_interaction(Darray *fc3_normal_squared,
 		     const int *grid_address,
 		     const int *mesh,
 		     const Darray *fc3,
-                     const int *atc,
-                     const int *atc_rec,
+             const int *atc,
+             const int *atc_rec,
+             const char* g_skip,
 		     const Darray *shortest_vectors,
 		     const Iarray *multiplicity,
 		     const double *masses,
@@ -156,7 +159,8 @@ void get_interaction(Darray *fc3_normal_squared,
 			   eigvecs,
 			   fc3,
 			   atc,
-                           atc_rec,
+               atc_rec,
+               g_skip + i * num_band0 * num_band * num_band,
 			   q, /* q0, q1, q2 */
 			   shortest_vectors,
 			   multiplicity,
@@ -168,7 +172,7 @@ void get_interaction(Darray *fc3_normal_squared,
 			   num_band,
 			   cutoff_frequency,
 			   cutoff_hfrequency,
-                           cutoff_delta);
+               cutoff_delta);
     } else {
       real_to_normal((fc3_normal_squared->data +
 		      i * num_band0 * num_band * num_band),
@@ -180,7 +184,8 @@ void get_interaction(Darray *fc3_normal_squared,
 		     eigvecs[2],
 		     fc3,
 		     atc,
-                     atc_rec,
+             atc_rec,
+             g_skip + i * num_band0 * num_band * num_band,
 		     q, /* q0, q1, q2 */
 		     shortest_vectors,
 		     multiplicity,
@@ -192,7 +197,7 @@ void get_interaction(Darray *fc3_normal_squared,
 		     num_band,
 		     cutoff_frequency,
 		     cutoff_hfrequency,
-                     cutoff_delta);
+             cutoff_delta);
     }
   }
 }
@@ -206,7 +211,8 @@ static void real_to_normal(double *fc3_normal_squared,
 			   const lapack_complex_double *eigvecs2,
 			   const Darray *fc3,
 			   const int *atc, //atom triplet cut off
-                           const int *atc_rec,
+               const int *atc_rec,
+               const char* g_skip,
 			   const double q[9], /* q0, q1, q2 */
 			   const Darray *shortest_vectors,
 			   const Iarray *multiplicity,
@@ -218,7 +224,7 @@ static void real_to_normal(double *fc3_normal_squared,
 			   const int num_band,
 			   const double cutoff_frequency,
 			   const double cutoff_hfrequency,
-                           const double cutoff_delta)
+               const double cutoff_delta)
 			   
 {
   int num_patom;
@@ -234,7 +240,7 @@ static void real_to_normal(double *fc3_normal_squared,
 		     q,
 		     fc3,
 		     atc,
-                     atc_rec,
+             atc_rec,
 		     shortest_vectors,
 		     multiplicity,
 		     p2s_map,
@@ -252,10 +258,11 @@ static void real_to_normal(double *fc3_normal_squared,
 		       band_indices,
 		       num_band0,
 		       num_band,
-                       atc_rec,
+               atc_rec,
+               g_skip,
 		       cutoff_frequency,
 		       cutoff_hfrequency,
-                       cutoff_delta);
+               cutoff_delta);
 
   free(fc3_reciprocal);
 }
@@ -265,7 +272,8 @@ static void real_to_normal_sym_q(double *fc3_normal_squared,
 				 lapack_complex_double *eigvecs[3],
 				 const Darray *fc3,
 				 const int *atc,
-                                 const int *atc_rec,
+                 const int *atc_rec,
+                 const char* g_skip,
 				 const double q[9], /* q0, q1, q2 */
 				 const Darray *shortest_vectors,
 				 const Iarray *multiplicity,
@@ -277,7 +285,7 @@ static void real_to_normal_sym_q(double *fc3_normal_squared,
 				 const int num_band,
 				 const double cutoff_frequency,
 				 const double cutoff_hfrequency,
-                                 const double cutoff_delta)
+                 const double cutoff_delta)
 {
   int i, j, k, l;
   int band_ex[3];
@@ -306,7 +314,8 @@ static void real_to_normal_sym_q(double *fc3_normal_squared,
 		   eigvecs[index_exchange[i][2]],
 		   fc3,
 		   atc,
-                   atc_rec,
+           atc_rec,
+           g_skip,
 		   q_ex, /* q0, q1, q2 */
 		   shortest_vectors,
 		   multiplicity,
@@ -318,7 +327,7 @@ static void real_to_normal_sym_q(double *fc3_normal_squared,
 		   num_band,
 		   cutoff_frequency,
 		   cutoff_hfrequency,
-                   cutoff_delta);
+           cutoff_delta);
     for (j = 0; j < num_band0; j++) {
       for (k = 0; k < num_band; k++) {
 	for (l = 0; l < num_band; l++) {

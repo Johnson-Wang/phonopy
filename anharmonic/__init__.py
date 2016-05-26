@@ -121,12 +121,26 @@ class Cutoff():
     def set_pair_distances(self):
         num_atom = self._cell.get_number_of_atoms()
         lattice = self._cell.get_cell()
-        min_distances = np.zeros((num_atom, num_atom), dtype='double')
-        for i in range(num_atom): # run in cell
-            for j in range(num_atom): # run in primitive
-                min_distances[i, j] = np.linalg.norm(np.dot(
-                        get_equivalent_smallest_vectors(
-                            i, j, self._cell, lattice, self._symprec)[0], lattice))
+
+        try:
+            from scipy.spatial.distance import cdist
+            positions = self._cell.get_scaled_positions()
+            positions_cart = self._cell.get_positions()
+            distances = []
+            for i in (-1, 0, 1):
+                for j in (-1, 0, 1):
+                    for k in (-1, 0, 1):
+                        positions_trans = positions + np.array([i,j,k])
+                        positions_trans_cart = np.dot(positions_trans, lattice)
+                        distances.append(cdist(positions_cart, positions_trans_cart))
+            min_distances = np.min(np.array(distances), axis=0)
+        except ImportError:
+            min_distances = np.zeros((num_atom, num_atom), dtype='double')
+            for i in range(num_atom): # run in cell
+                for j in range(num_atom): # run in primitive
+                    min_distances[i, j] = np.linalg.norm(np.dot(
+                            get_equivalent_smallest_vectors(
+                                i, j, self._cell, lattice, self._symprec)[0], lattice))
         self._pair_distances = min_distances
 
     def get_pair_inclusion(self):
@@ -148,8 +162,8 @@ class Cutoff():
         include_triplet= np.ones((num_atom, num_atom, num_atom), dtype=bool)
         if self._pair_distances == None:
             self.set_pair_distances()
-        for i, j, k in np.ndindex(num_atom, num_atom, num_atom):
-            if cut_triplet is not None:
+        if cut_triplet is not None:
+            for i, j, k in np.ndindex(num_atom, num_atom, num_atom):
                 max_dist = max(self._pair_distances[i,j], self._pair_distances[j,k],self._pair_distances[i,k])
                 if max_dist > cut_triplet[i, j, k]:
                     include_triplet[i,j, k] = False

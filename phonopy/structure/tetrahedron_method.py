@@ -44,6 +44,7 @@ parallelepiped_vertices = np.array([[0, 0, 0],
                                     [0, 1, 1],
                                     [1, 1, 1]], dtype='intc', order='C')
 parallelogram_vertices = np.array([[0,0],[0,1],[1,0],[1,1]], dtype="intc", order="C")
+segment_vertices = np.array([0, 1], dtype="intc", order="C")
 
 class TriagonalMethod:
     def __init__(self,
@@ -117,6 +118,211 @@ class TriagonalMethod:
                 j+=1
         self._central_indices = central_indices
 
+class SegmentsMethod:
+    def __init__(self,
+                 primitive_vectors,
+                 mesh):
+        self._mesh = np.array(mesh)
+        assert np.count_nonzero(self._mesh > 1) == 1
+        self._primitive_vectors = np.array(
+            primitive_vectors, dtype='double', order='C') / mesh # column vectors
+        self._vertices = None
+        self._relative_grid_addresses = None
+        self._central_indices = None
+        self._segments_omegas = None
+        self._omegas = None
+        self._create_segments()
+        self._set_relative_grid_addresses()
+        self._integration_weight = None
+
+    def get_tetrahedra(self):
+        return self._relative_grid_addresses
+
+    def _run_c(self, omegas, value='I'):
+        self._integration_weight = spg.get_tetrahedra_integration_weight(
+            omegas,
+            self._segments_omegas,
+            function=value)
+
+    def run(self, omegas, value='I'):
+        try:
+            # raise ImportError
+            import phonopy._phonopy as phonoc
+            self._run_c(omegas, value=value)
+        except ImportError:
+            self._run_py(omegas, value=value)
+
+    def get_unique_tetrahedra_vertices(self):
+        unique_vertices = []
+        for adrs in self._relative_grid_addresses.reshape(-1, 3):
+            found = False
+            for uadrs in unique_vertices:
+                if (uadrs == adrs).all():
+                    found = True
+                    break
+            if not found:
+                unique_vertices.append(adrs)
+        return np.array(unique_vertices, dtype='intc', order='C')
+
+    def set_tetrahedra_omegas(self, segments_omegas):
+        """
+        tetrahedra_omegas: (24, 4) omegas at self._relative_grid_addresses
+        """
+        self._segments_omegas = segments_omegas
+
+    def get_integration_weight(self):
+        return self._integration_weight
+
+    def _run_py(self, omegas, value='I'):
+        if isinstance(omegas, float) or isinstance(omegas, int):
+            iw = self._get_integration_weight_py(omegas, value=value)
+        else:
+            iw = np.zeros(len(omegas), dtype='double')
+            for i, omega in enumerate(omegas):
+                iw[i] = self._get_integration_weight_py(omega, value=value)
+        self._integration_weight = iw
+
+    def _get_integration_weight_py(self, omega, value='I'):
+        if value == 'I':
+            IJ = self._I
+            gn = self._g
+        else:
+            IJ = self._J
+            gn = self._n
+
+        self._sort_indices = np.argsort(self._segments_omegas, axis=1)
+        sum_value = 0.0
+        self._omega = omega
+        for omegas, indices, ci in zip(self._segments_omegas,
+                                       self._sort_indices,
+                                       self._central_indices):
+            self._vertices_omegas = omegas[indices]
+
+            v = self._vertices_omegas
+            if (omega < v[0]):
+                sum_value += IJ(0, np.where(indices==ci)[0][0]) * gn(0)
+            elif (v[0] < omega and omega < v[1]):
+                sum_value += IJ(1, np.where(indices==ci)[0][0]) * gn(1)
+            elif (v[1] < omega):
+                sum_value += IJ(2, np.where(indices==ci)[0][0]) * gn(2)
+
+        return sum_value
+
+    def _create_segments(self):
+        # 0--------------1
+        #
+        self._vertices = [0, 1]
+
+    def _set_relative_grid_addresses(self):
+        relative_grid_addresses = np.array([[0, 1], [0, -1]], dtype="intc")
+        self._relative_grid_addresses = np.zeros((2,2,3), dtype="intc")
+        for i in range(3):
+            if not self._mesh[i] == 1:
+                self._relative_grid_addresses[:,:,i] = relative_grid_addresses
+                break
+        self._central_indices = np.array([0,0], dtype="intc")
+
+    def _f(self, n, m):
+        return ((self._omega - self._vertices_omegas[m]) /
+                (self._vertices_omegas[n] - self._vertices_omegas[m]))
+
+    def _J(self, i, ci):
+        if i == 0:
+            return self._J_0()
+        elif i == 1:
+            if ci == 0:
+                return self._J_10()
+            elif ci == 1:
+                return self._J_11()
+            else:
+                assert False
+        elif i == 2:
+            return self._J_2()
+        else:
+            assert False
+
+    def _I(self, i, ci):
+        if i == 0:
+            return self._I_0()
+        elif i == 1:
+            if ci == 0:
+                return self._I_10()
+            elif ci == 1:
+                return self._I_11()
+            else:
+                assert False
+        elif i == 2:
+            return self._I_2()
+        else:
+            assert False
+
+    def _n(self, i):
+        if i == 0:
+            return self._n_0()
+        elif i == 1:
+            return self._n_1()
+        elif i == 2:
+            return self._n_2()
+        else:
+            assert False
+
+    def _g(self, i):
+        if i == 0:
+            return self._g_0()
+        elif i == 1:
+            return self._g_1()
+        elif i == 2:
+            return self._g_2()
+        else:
+            assert False
+
+    def _n_0(self):
+        """omega < omega1"""
+        return 0.0
+
+    def _n_1(self):
+        """omega1 < omega < omega2"""
+        return self._f(1, 0)
+
+    def _n_2(self):
+        """omega2 < omega"""
+        return 1.0
+
+    def _g_0(self):
+        """omega < omega1"""
+        return 0.0
+
+    def _g_1(self):
+        """omega1 < omega < omega2"""
+        return self._n_1() / (self._omega - self._vertices_omegas[0])
+
+    def _g_2(self):
+        """omega2 < omega"""
+        return 0.0
+
+    def _J_0(self):
+        return 0.0
+
+    def _J_10(self):
+        return (1.0 + self._f(0, 1)) / 2
+
+    def _J_11(self):
+        return self._f(1, 0) / 2
+
+    def _J_2(self):
+        return 0.5
+
+    def _I_0(self):
+        return 0.0
+
+    def _I_10(self):
+        return self._f(0, 1)
+
+    def _I_11(self):
+        return self._f(1, 0)
+
+    def _I_2(self):
+        return 0.0
 
 class TetrahedronMethod:
     def __init__(self,
@@ -198,15 +404,7 @@ class TetrahedronMethod:
                                        self._sort_indices,
                                        self._central_indices):
             self._vertices_omegas = omegas[indices]
-            # i_where = np.where(omega < self._vertices_omegas)[0]
-            # if len(i_where):
-            #     i = i_where[0]
-            # else:
-            #     i = 4
             v = self._vertices_omegas
-            if (np.abs(omega - v) < 1e-6).any():
-                omega = np.extract(np.abs(omega - v) < 1e-6, v)[0] - 1e-6
-                self._omega = omega
             if (omega < v[0]):
                 sum_value += IJ(0, np.where(indices==ci)[0][0]) * gn(0)
             elif (v[0] < omega and omega < v[1]):
@@ -218,7 +416,7 @@ class TetrahedronMethod:
             elif (v[3] < omega):
                 sum_value += IJ(4, np.where(indices==ci)[0][0]) * gn(4)
 
-        return sum_value / 6
+        return sum_value / 6 # a parallelpipe consists of 6 tetrahedra
 
     def _create_tetrahedra(self):
         #
@@ -266,8 +464,6 @@ class TetrahedronMethod:
 
     def _set_relative_grid_addresses(self):
         try:
-            raise ImportError
-            import phonopy._phonopy as phonoc
             rga = spg.get_tetrahedra_relative_grid_address(
                 self._primitive_vectors)
             self._relative_grid_addresses = rga
@@ -276,7 +472,7 @@ class TetrahedronMethod:
             relative_grid_addresses = np.zeros((24, 4, 3), dtype='intc')
             central_indices = np.zeros(24, dtype='intc') # 24 corresponds to all the vertices in the 6 tetrahedrons
             pos = 0
-            for i in range(8):
+            for i in range(8): # 8 corners in a parallelpipe
                 ppd_shifted = (parallelepiped_vertices -
                                parallelepiped_vertices[i])
                 for tetra in self._vertices:
@@ -284,8 +480,14 @@ class TetrahedronMethod:
                         central_indices[pos] = np.where(tetra==i)[0][0]
                         relative_grid_addresses[pos, :, :] = ppd_shifted[tetra]
                         pos += 1
-            self._relative_grid_addresses = relative_grid_addresses
+            # To make sure it coincides with the results calculated from C code
+            for i in range(24):
+                centrals = relative_grid_addresses[i, central_indices[i]].copy()
+                relative_grid_addresses[i, central_indices[i]] = relative_grid_addresses[i, 0].copy()
+                relative_grid_addresses[i, 0] = centrals
+            central_indices = np.zeros(24, dtype='intc')
             self._central_indices = central_indices
+            self._relative_grid_addresses = relative_grid_addresses
 
     def _f(self, n, m):
         return ((self._omega - self._vertices_omegas[m]) /

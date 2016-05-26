@@ -581,8 +581,6 @@ def get_neighboring_grid_points(grid_point,
                                 bz_map)
     return relative_grid_points
 
-
-
 ######################
 # Tetrahedron method #
 ######################

@@ -122,9 +122,6 @@ class conductivity_ITE_CG(Conductivity):
                              3), dtype='double')
         self._collision_out = np.zeros((num_sigma, num_grid, num_temp, num_band), dtype="double")
         self._gamma = np.zeros((num_sigma, num_grid, num_temp, num_band), dtype="double")
-
-        # self.run_smrt_no_sigma_adaption()
-        # if self._is_adaptive_sigma:
         self.run_smrt_sigma_adaption()
         if self._is_read_col:
             self._pp.release_amplitude_all()
@@ -135,13 +132,23 @@ class conductivity_ITE_CG(Conductivity):
         while asigma_step <= self._max_asigma_step:
             if self._collision.get_read_collision() and self._is_adaptive_sigma:
                 self._collision.set_write_collision(True)
+
+            if asigma_step > 1:
+                if asigma_step > 2:
+                    self._gamma_ppp = self._gamma_pp.copy()
+                self._gamma_pp = self._gamma_prev.copy()
+            self._gamma_prev = self._collision._gamma_all.copy()
+
             for s in range(len(self._sigmas)):
+
                 if (self._rkappa[s] < self._diff_kappa).all():
                     continue
                 self.set_sigma(s)
                 for t in range(len(self._temperatures)):
                     if (self._rkappa[s,t] < self._diff_kappa).all():
                         continue
+                    if asigma_step > 1:
+                        print "Relative kappa difference %.2e" %self._rkappa[s,t].max()
                     self.set_temperature(t)
                     self.set_collision()
                     if self._log_level:
@@ -153,11 +160,19 @@ class conductivity_ITE_CG(Conductivity):
                     self.print_calculation_progress_header()
                     for g, grid_point in enumerate(self._grid_points):
                         self._collision.set_grid(grid_point)
-                        self._collision.run_interaction_at_grid_point()
+                        self._collision.set_phonons_triplets()
                         self._collision.set_grid_points_occupation()
                         self._collision.reduce_triplets()
                         if asigma_step > 0:
-                            self._collision.set_asigma()
+                            if asigma_step > 2:
+                                self._collision.set_asigma(self._gamma_pp[s, :, t], self._gamma_ppp[s, :, t])
+                                # self._collision.set_asigma()
+                            else:
+                                self._collision.set_asigma()
+                        self._collision.set_integration_weights()
+                        self._collision.run_interaction_at_grid_point(self._collision._g_skip_reduced)
+                        # self._collision.run_interaction_at_grid_point()
+
                         self._collision.run()
                         self.assign_perturbation_at_grid_point(s, g, t)
                         self.print_calculation_progress(g)
@@ -242,12 +257,11 @@ class conductivity_ITE_CG(Conductivity):
         s = self._isigma
         if not self._is_converge[s,t]:
             if self._log_level:
-                print "######Iteration preparation at the first step sigma=%s, t=%f#######"%(self._sigma, self._temp)
-                print "Calculation the residual from SMRT..."
+                print "######Iteration preparation at the first step sigma=%s, t=%.2f#######"%(self._sigma, self._temp)
+                print "Calculating the residual from SMRT..."
             self.print_calculation_progress_header()
             for i, grid_point in enumerate(self._grid_points):
                 self._collision.calculate_collision(grid_point)
-                # print self._collision_out.sum()
                 #calculating scattering rate
                 self.get_total_rotation()
                 import anharmonic._phono3py as phono3c
@@ -388,7 +402,7 @@ class conductivity_ITE_CG(Conductivity):
                 dkappa_max = np.abs(self.get_kappa_residual_at_s_t(s, t)).max()
                 kappa = self.get_kappa()[s, :, t]
                 dkappa_max /= kappa.sum(axis=(0,1)).max()
-                print "Relative residual kappa for T=%.2f K is %10.5e" % (temp, dkappa_max)
+                print "Relative residual kappa for sigma=%s, T=%.2f K is %10.5e" % (sigma, temp, dkappa_max)
                 is_converge=(dkappa_max < self._diff_kappa)
                 self._is_converge[s,t]= is_converge
                 if is_converge:
@@ -465,6 +479,7 @@ class conductivity_ITE_CG(Conductivity):
         for i in range(6):
             self._rkappa[s, :, i] = rkappa[:, i] /  kappa_max
         self._kappa[s] = kappa
+
 
 
     def get_kappa_residual_at_s_t(self, s, t):

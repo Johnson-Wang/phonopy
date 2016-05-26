@@ -1087,19 +1087,29 @@ get_tetrahedra_integration_weight(PyObject *self, PyObject *args)
   double omega;
   PyArrayObject* tetrahedra_omegas_py;
   char function;
+  double iw;
   if (!PyArg_ParseTuple(args, "dOc",
 			&omega,
 			&tetrahedra_omegas_py,
 			&function)) {
     return NULL;
   }
-
-  SPGCONST double (*tetrahedra_omegas)[4] =
-    (double(*)[4])tetrahedra_omegas_py->data;
-
-  double iw = spg_get_tetrahedra_integration_weight(omega,
-						    tetrahedra_omegas,
-						    function);
+  const int num_adjacent = tetrahedra_omegas_py->dimensions[0];
+  const int num_vertices = tetrahedra_omegas_py->dimensions[1];
+  SPGCONST double (*tetrahedra_omegas)[num_vertices] =
+    (double(*)[num_vertices])tetrahedra_omegas_py->data;
+  if (num_adjacent == 24 && num_vertices == 4){ // 3 dimensional
+      iw = spg_get_tetrahedra_integration_weight(omega,
+                                    tetrahedra_omegas,
+                                    function);
+  }
+  else if (num_adjacent == 6 && num_vertices == 3){ // 2 dimensional
+  }
+  else if (num_adjacent == 2 && num_vertices == 2){ // 1 dimensional
+      iw = spg_get_tetrahedra_integration_weight_1D(omega,
+                                    tetrahedra_omegas,
+                                    function);
+  }
 
   return PyFloat_FromDouble(iw);
 }
@@ -1118,18 +1128,30 @@ get_tetrahedra_integration_weight_at_omegas(PyObject *self, PyObject *args)
 			&function)) {
     return NULL;
   }
-
+  const int num_adjacent = tetrahedra_omegas_py->dimensions[0];
+  const int num_vertices = tetrahedra_omegas_py->dimensions[1];
   const double *omegas = (double*)omegas_py->data;
   double *iw = (double*)integration_weights_py->data;
   const int num_omegas = (int)omegas_py->dimensions[0];
-  SPGCONST double (*tetrahedra_omegas)[4] =
-    (double(*)[4])tetrahedra_omegas_py->data;
+  SPGCONST double (*tetrahedra_omegas)[num_vertices] =
+    (double(*)[num_vertices])tetrahedra_omegas_py->data;
 
-  spg_get_tetrahedra_integration_weight_at_omegas(iw,
-						  num_omegas,
-						  omegas,
-						  tetrahedra_omegas,
-						  function);
+  if (num_adjacent == 24 && num_vertices == 4){ // 3 dimensional
+      spg_get_tetrahedra_integration_weight_at_omegas(iw,
+                              num_omegas,
+                              omegas,
+                              tetrahedra_omegas,
+                              function);
+  }
+  else if (num_adjacent == 6 && num_vertices == 3){ // 2 dimensional
+  }
+  else if (num_adjacent == 2 && num_vertices == 2){ // 1 dimensional
+      spg_get_tetrahedra_integration_weight_at_omegas_1D(iw,
+                              num_omegas,
+                              omegas,
+                              tetrahedra_omegas,
+                              function);
+  }
 
   Py_RETURN_NONE;
 }

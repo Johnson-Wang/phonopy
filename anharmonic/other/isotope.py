@@ -314,7 +314,7 @@ class CollisionIso:
                 self._frequencies)
             
             for bi, frequencies in enumerate(tfreqs):
-                thm.set_tetrahedra_omegas(frequencies)
+                thm.set_segments_omegas(frequencies)
                 thm.run(self._frequencies[self._grid_point, self._band_indices] + infinitesmal)
                 iw = thm.get_integration_weight()
                 self._integration_weights[i, :, bi] = iw

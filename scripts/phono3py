@@ -323,7 +323,7 @@ parser.add_option("--fst", "--frequency_shift",
                   dest="is_frequency_shift",
                   action="store_true",
                   help="Calculate frequency shifts")
-parser.add_option("--max_ite", dest="max_ite",
+parser.add_option("--Nite","--nite", dest="max_ite",
                   type="int",
                   help="maximum iteration steps whether or not the convergence is reached")
 parser.add_option("--md", "--mesh_divisors",

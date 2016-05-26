@@ -234,13 +234,11 @@ class ImagSelfEnergy:
             self._g[2] = 0
 
     def run_interaction(self, is_triplets_dispersed=False, log_level=0):
+        self.set_phonons(lang=self._lang)
         self._interaction.run(lang=self._lang,
                               log_level=log_level)
         self._fc3_normal_squared = self._interaction.get_interaction_strength()
-        (self._frequencies,
-         self._eigenvectors) = self._interaction.get_phonons()[:2]
         self._band_indices = self._interaction.get_band_indices()
-        
         mesh = self._interaction.get_mesh_numbers()
         num_grid = np.prod(mesh)
 
@@ -252,6 +250,11 @@ class ImagSelfEnergy:
                                  * 18 * np.pi / (Hbar * EV) ** 2
                                  / (2 * np.pi * THz) ** 2
                                  / num_grid)
+
+    def set_phonons(self, lang="C"):
+        self._interaction.set_phonons(lang=lang)
+        (self._frequencies,
+         self._eigenvectors) = self._interaction.get_phonons()[:2]
 
     def get_imag_self_energy(self):
         if self._cutoff_frequency is None:

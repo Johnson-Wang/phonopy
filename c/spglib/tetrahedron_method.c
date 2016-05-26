@@ -164,7 +164,7 @@ static int sort_omegas(double v[4]);
 static double _f(const int n,
 		 const int m,
 		 const double omega,
-		 const double vertices_omegas[4]);
+		 const double vertices_omegas[]);
 static double _J(const int i,
 		 const int ci,
 		 const double omega,
@@ -247,7 +247,63 @@ static double _I_32(const double omega,
 static double _I_33(const double omega,
 		    const double vertices_omegas[4]);
 static double _I_4(void);
-
+static void
+get_integration_weight_at_omegas_1D(double *integration_weights,
+				 const int num_omegas,
+				 const double *omegas,
+				 SPGCONST double tetrahedra_omegas[2][2],
+				 double (*gn)(const int,
+					      const double,
+					      const double[2]),
+				 double (*IJ)(const int,
+					      const int,
+					      const double,
+					      const double[2]));
+static int sort_omegas_1D(double v[2]);
+static double
+get_integration_weight_1D(const double omega,
+		       SPGCONST double tetrahedra_omegas[2][2],
+		       double (*gn)(const int,
+				    const double,
+				    const double[2]),
+		       double (*IJ)(const int,
+				    const int,
+				    const double,
+				    const double[2]));
+static double _J_1D(const int i,
+		 const int ci,
+		 const double omega,
+		 const double vertices_omegas[2]);
+static double _I_1D(const int i,
+		 const int ci,
+		 const double omega,
+		 const double vertices_omegas[2]);
+static double _n_1D(const int i,
+		 const double omega,
+		 const double vertices_omegas[2]);
+static double _g_1D(const int i,
+		 const double omega,
+		 const double vertices_omegas[2]);
+static double _n_0_1D(void);
+static double _n_1_1D(const double omega,
+		   const double vertices_omegas[2]);
+static double _n_2_1D(void);
+static double _g_0_1D(void);
+static double _g_1_1D(const double omega,
+		   const double vertices_omegas[2]);
+static double _g_2_1D(void);
+static double _J_0_1D(void);
+static double _J_10_1D(const double omega,
+		    const double vertices_omegas[2]);
+static double _J_11_1D(const double omega,
+		    const double vertices_omegas[2]);
+static double _J_2_1D(void);
+static double _I_0_1D(void);
+static double _I_10_1D(const double omega,
+		    const double vertices_omegas[2]);
+static double _I_11_1D(const double omega,
+		    const double vertices_omegas[2]);
+static double _I_2_1D(void);
 
 void thm_get_relative_grid_address(int relative_grid_address[24][4][3],
 				   SPGCONST double rec_lattice[3][3])
@@ -479,7 +535,7 @@ static int get_main_diagonal(SPGCONST double rec_lattice[3][3])
 static double _f(const int n,
 		 const int m,
 		 const double omega,
-		 const double vertices_omegas[4])
+		 const double vertices_omegas[])
 {
   return ((omega - vertices_omegas[m]) /
 	  (vertices_omegas[n] - vertices_omegas[m]));
@@ -992,6 +1048,301 @@ static double _I_33(const double omega,
 }
 
 static double _I_4(void)
+{
+  return 0.0;
+}
+
+
+
+//1D condition
+double thm_get_integration_weight_1D(const double omega,
+				  SPGCONST double tetrahedra_omegas[2][2],
+				  const char function)
+{
+  if (function == 'I') {
+    return get_integration_weight_1D(omega,
+				  tetrahedra_omegas,
+				  _g_1D, _I_1D);
+  } else {
+    return get_integration_weight_1D(omega,
+				  tetrahedra_omegas,
+				  _n_1D, _J_1D);
+  }
+}
+
+void
+thm_get_integration_weight_at_omegas_1D(double *integration_weights,
+				     const int num_omegas,
+				     const double *omegas,
+				     SPGCONST double tetrahedra_omegas[2][2],
+				     const char function)
+{
+  if (function == 'I') {
+    get_integration_weight_at_omegas_1D(integration_weights,
+				     num_omegas,
+				     omegas,
+				     tetrahedra_omegas,
+				     _g_1D, _I_1D);
+  } else {
+    get_integration_weight_at_omegas_1D(integration_weights,
+				     num_omegas,
+				     omegas,
+				     tetrahedra_omegas,
+				     _n_1D, _J_1D);
+  }
+}
+
+static void
+get_integration_weight_at_omegas_1D(double *integration_weights,
+				 const int num_omegas,
+				 const double *omegas,
+				 SPGCONST double tetrahedra_omegas[2][2],
+				 double (*gn)(const int,
+					      const double,
+					      const double[2]),
+				 double (*IJ)(const int,
+					      const int,
+					      const double,
+					      const double[2]))
+{
+  int i;
+
+#pragma omp parallel for
+  for (i = 0; i < num_omegas; i++) {
+    integration_weights[i] = get_integration_weight_1D(omegas[i],
+						    tetrahedra_omegas,
+						    gn, IJ);
+  }
+}
+
+
+static int sort_omegas_1D(double v[2])
+{
+  int i;
+  double temp;
+  i = 0;
+  if (v[0] > v[1]) {
+    temp = v[1];
+    v[1] = v[0];
+    v[0] = temp;
+    i = 1;
+  }
+
+  return i;
+}
+
+static double
+get_integration_weight_1D(const double omega,
+		       SPGCONST double tetrahedra_omegas[2][2],
+		       double (*gn)(const int,
+				    const double,
+				    const double[2]),
+		       double (*IJ)(const int,
+				    const int,
+				    const double,
+				    const double[2]))
+{
+  int i, j, ci;
+  double sum;
+  double v[2];
+
+  sum = 0;
+  for (i = 0; i < 2; i++) {
+    for (j = 0; j < 2; j++) {
+      v[j] = tetrahedra_omegas[i][j];
+    }
+
+    ci = sort_omegas_1D(v);
+    if (omega < v[0]) {
+      sum += IJ(0, ci, omega, v) * gn(0, omega, v);
+    } else {
+      if (v[0] < omega && omega < v[1]) {
+	sum += IJ(1, ci, omega, v) * gn(1, omega, v);
+      } else {
+	    if (v[1] < omega) {
+	      sum += IJ(2, ci, omega, v) * gn(2, omega, v);
+	    }
+	  }
+    }
+  }
+  return sum;
+}
+
+static double _J_1D(const int i,
+		 const int ci,
+		 const double omega,
+		 const double vertices_omegas[2])
+{
+  switch (i) {
+  case 0:
+    return _J_0_1D();
+  case 1:
+    switch (ci) {
+    case 0:
+      return _J_10_1D(omega, vertices_omegas);
+    case 1:
+      return _J_11_1D(omega, vertices_omegas);
+    }
+  case 2:
+    return _J_2_1D();
+  }
+  warning_print("******* Warning *******\n");
+  warning_print(" J is something wrong. \n");
+  warning_print("******* Warning *******\n");
+  warning_print("(line %d, %s).\n", __LINE__, __FILE__);
+
+  return 0;
+}
+
+
+static double _I_1D(const int i,
+		 const int ci,
+		 const double omega,
+		 const double vertices_omegas[2])
+{
+  switch (i) {
+  case 0:
+    return _I_0_1D();
+  case 1:
+    switch (ci) {
+    case 0:
+      return _I_10_1D(omega, vertices_omegas);
+    case 1:
+      return _I_11_1D(omega, vertices_omegas);
+    }
+  case 2:
+    return _I_2_1D();
+  }
+
+  warning_print("******* Warning *******\n");
+  warning_print(" I is something wrong. \n");
+  warning_print("******* Warning *******\n");
+  warning_print("(line %d, %s).\n", __LINE__, __FILE__);
+
+  return 0;
+}
+
+static double _n_1D(const int i,
+		 const double omega,
+		 const double vertices_omegas[2])
+{
+  switch (i) {
+  case 0:
+    return _n_0_1D();
+  case 1:
+    return _n_1_1D(omega, vertices_omegas);
+  case 2:
+    return _n_2_1D();
+  }
+
+  warning_print("******* Warning *******\n");
+  warning_print(" n is something wrong. \n");
+  warning_print("******* Warning *******\n");
+  warning_print("(line %d, %s).\n", __LINE__, __FILE__);
+
+  return 0;
+}
+
+static double _g_1D(const int i,
+		 const double omega,
+		 const double vertices_omegas[2])
+{
+  switch (i) {
+  case 0:
+    return _g_0_1D();
+  case 1:
+    return _g_1_1D(omega, vertices_omegas);
+  case 2:
+    return _g_2_1D();
+  }
+
+  warning_print("******* Warning *******\n");
+  warning_print(" g is something wrong. \n");
+  warning_print("******* Warning *******\n");
+  warning_print("(line %d, %s).\n", __LINE__, __FILE__);
+
+  return 0;
+}
+
+/* omega < omega1 */
+static double _n_0_1D(void)
+{
+  return 0.0;
+}
+
+/* omega1 < omega < omega2 */
+static double _n_1_1D(const double omega,
+		   const double vertices_omegas[2])
+{
+  return _f(1, 0, omega, vertices_omegas);
+}
+
+/* omega2 < omega */
+static double _n_2_1D(void)
+{
+  return 1.0;
+}
+
+/* omega < omega1 */
+static double _g_0_1D(void)
+{
+  return 0.0;
+}
+
+/* omega1 < omega < omega2 */
+static double _g_1_1D(const double omega,
+		   const double vertices_omegas[2])
+{
+  return (1 / (vertices_omegas[1] - vertices_omegas[0]));
+}
+
+/* omega2 < omega */
+static double _g_2_1D(void)
+{
+  return 0.0;
+}
+
+static double _J_0_1D(void)
+{
+  return 0.0;
+}
+
+static double _J_10_1D(const double omega,
+		    const double vertices_omegas[2])
+{
+  return (1.0 +
+	  _f(0, 1, omega, vertices_omegas)) / 2;
+}
+
+static double _J_11_1D(const double omega,
+		    const double vertices_omegas[2])
+{
+  return _f(1, 0, omega, vertices_omegas) / 2;
+}
+
+static double _J_2_1D(void)
+{
+  return 0.5;
+}
+
+static double _I_0_1D(void)
+{
+  return 0.0;
+}
+
+static double _I_10_1D(const double omega,
+		    const double vertices_omegas[2])
+{
+  return _f(0, 1, omega, vertices_omegas);
+}
+
+static double _I_11_1D(const double omega,
+		    const double vertices_omegas[2])
+{
+  return _f(1, 0, omega, vertices_omegas);
+}
+
+static double _I_2_1D(void)
 {
   return 0.0;
 }

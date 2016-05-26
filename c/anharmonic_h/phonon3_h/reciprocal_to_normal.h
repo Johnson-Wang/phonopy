@@ -16,9 +16,10 @@ void reciprocal_to_normal(double *fc3_normal_squared,
 			  const int *band_indices,
 			  const int num_band0,
 			  const int num_band,
-                          const int *atc_rec,
+              const int *atc_rec,
+              const char* g_skip,
 			  const double cutoff_frequency,
 			  const double cutoff_hfrequency,
-                          const double cutoff_delta);
+              const double cutoff_delta);
 
 #endif

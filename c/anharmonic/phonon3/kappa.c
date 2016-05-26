@@ -295,30 +295,30 @@ void  get_collision_at_all_band_permute(double *collision, // actually collision
     {
       for (j=0;j<num_band;j++)
       {
-	for (k=0;k<num_band;k++)
-	{
-	    f0=frequency[l*3*num_band+0*num_band+i];
-	    f1=frequency[l*3*num_band+1*num_band+j];
-	    f2=frequency[l*3*num_band+2*num_band+k];
-	    if (f0 < cutoff_frequency || f1 < cutoff_frequency || f2 < cutoff_frequency)
-	      continue;
-	    n0=occupation[l*3*num_band+0*num_band+i];
-	    n1=occupation[l*3*num_band+1*num_band+j];
-	    n2=occupation[l*3*num_band+2*num_band+k];
-	    index = l*bbb + i * bb + j * num_band + k;
-	    g0 = g[index];
-	    index += num_triplet*bbb;
-	    g1 = g[index];
-	    index += num_triplet * bbb;
-	    g2 = g[index];
-	    W = interaction[l*bbb+i*bb+j*num_band+k] * 
-		(n0 * n1 * (n2 + 1) * g2  +
-		  n0 * (n1 + 1) * n2 * g1 +
-		  (n0 + 1) * n1 * n2 * g0);
-	    collision[l*3*bb+2*bb+i*num_band+j] += W;
-	    collision[l*3*bb+1*bb+k*num_band+i] += W ;
-	    collision[l*3*bb+0*bb+j*num_band+k] += W;
-	}
+        for (k=0;k<num_band;k++)
+        {
+            f0=frequency[l*3*num_band+0*num_band+i];
+            f1=frequency[l*3*num_band+1*num_band+j];
+            f2=frequency[l*3*num_band+2*num_band+k];
+            if (f0 < cutoff_frequency || f1 < cutoff_frequency || f2 < cutoff_frequency)
+              continue;
+            n0=occupation[l*3*num_band+0*num_band+i];
+            n1=occupation[l*3*num_band+1*num_band+j];
+            n2=occupation[l*3*num_band+2*num_band+k];
+            index = l*bbb + i * bb + j * num_band + k;
+            g0 = g[index];
+            index += num_triplet*bbb;
+            g1 = g[index];
+            index += num_triplet * bbb;
+            g2 = g[index];
+            W = interaction[l*bbb+i*bb+j*num_band+k] *
+            (n0 * n1 * (n2 + 1) * g2  +
+              n0 * (n1 + 1) * n2 * g1 +
+              (n0 + 1) * n1 * n2 * g0);
+            collision[l*3*bb+2*bb+i*num_band+j] += W;
+            collision[l*3*bb+1*bb+k*num_band+i] += W ;
+            collision[l*3*bb+0*bb+j*num_band+k] += W;
+        }
       }
     }
   }

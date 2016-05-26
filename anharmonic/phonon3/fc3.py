@@ -339,20 +339,27 @@ def solve_fc3(fc3,
         fc3[first_atom_num, i, j] = np.dot(inv_U, _get_rotated_fc2s(i, j, delta_fc2s, rot_map_syms, site_sym_cart)).reshape(3, 3, 3)
 
 def show_drift_fc3(fc3, name="fc3"):
-    num_atom = fc3.shape[0]
-    maxval1 = 0
-    maxval2 = 0
-    maxval3 = 0
-    for i, j, k, l, m in list(np.ndindex((num_atom, num_atom, 3, 3, 3))):
-        val1 = fc3[:, i, j, k, l, m].sum()
-        val2 = fc3[i, :, j, k, l, m].sum()
-        val3 = fc3[i, j, :, k, l, m].sum()
-        if abs(val1) > abs(maxval1):
-            maxval1 = val1
-        if abs(val2) > abs(maxval2):
-            maxval2 = val2
-        if abs(val3) > abs(maxval3):
-            maxval3 = val3
+    # num_atom = fc3.shape[0]
+    # maxval1 = 0
+    # maxval2 = 0
+    # maxval3 = 0
+    fc3_sum1 = fc3.sum(axis=0)
+    maxval1 = fc3_sum1.flatten()[np.abs(fc3_sum1).argmax()]
+    fc3_sum2 = fc3.sum(axis=1)
+    maxval2 = fc3_sum2.flatten()[np.abs(fc3_sum2).argmax()]
+    fc3_sum3 = fc3.sum(axis=2)
+    maxval3 = fc3_sum3.flatten()[np.abs(fc3_sum3).argmax()]
+
+    # for i, j, k, l, m in list(np.ndindex((num_atom, num_atom, 3, 3, 3))):
+    #     val1 = fc3[:, i, j, k, l, m].sum()
+    #     val2 = fc3[i, :, j, k, l, m].sum()
+    #     val3 = fc3[i, j, :, k, l, m].sum()
+    #     if abs(val1) > abs(maxval1):
+    #         maxval1 = val1
+    #     if abs(val2) > abs(maxval2):
+    #         maxval2 = val2
+    #     if abs(val3) > abs(maxval3):
+    #         maxval3 = val3
     print ("max drift of %s:" % name), maxval1, maxval2, maxval3
 
 def cutoff_fc3(fc3,

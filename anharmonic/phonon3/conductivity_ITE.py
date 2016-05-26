@@ -157,7 +157,7 @@ class conductivity_ITE(Conductivity):
                 dkappa_max = np.abs(self.get_kappa_residual_at_s_t(s, t)).max()
                 kappa = self.get_kappa()[s, :, t]
                 dkappa_max /= kappa.sum(axis=(0,1)).max()
-                print "Relative residual kappa for T=%.2f K is %10.5e" % (temp, dkappa_max)
+                print "Relative residual kappa for sigma=%s, T=%.2f K is %10.5e" % (sigma, temp, dkappa_max)
                 is_converge=(dkappa_max < self._diff_kappa)
                 self._is_converge[s,t]= is_converge
                 if is_converge:
@@ -190,6 +190,14 @@ class conductivity_ITE(Conductivity):
         while asigma_step <= self._max_asigma_step:
             if self._collision.get_read_collision()  and self._is_adaptive_sigma:
                 self._collision.set_write_collision(True)
+            if self._collision.get_read_collision() and self._is_adaptive_sigma:
+                self._collision.set_write_collision(True)
+
+            if asigma_step > 1:
+                if asigma_step > 2:
+                    self._gamma_ppp = self._gamma_pp.copy()
+                self._gamma_pp = self._gamma_prev.copy()
+            self._gamma_prev = self._collision._gamma_all.copy()
             for s in range(len(self._sigmas)):
                 if (self._rkappa[s] < self._diff_kappa).all():
                     continue
@@ -208,11 +216,16 @@ class conductivity_ITE(Conductivity):
                     self.print_calculation_progress_header()
                     for g, grid_point in enumerate(self._grid_points):
                         self._collision.set_grid(grid_point)
-                        self._collision.run_interaction_at_grid_point()
+                        self._collision.set_phonons_triplets()
                         self._collision.set_grid_points_occupation()
                         self._collision.reduce_triplets()
                         if asigma_step > 0:
-                            self._collision.set_asigma()
+                            if asigma_step > 2:
+                                self._collision.set_asigma(self._gamma_pp[s, :, t], self._gamma_ppp[s, :, t])
+                            else:
+                                self._collision.set_asigma()
+                        self._collision.set_integration_weights()
+                        self._collision.run_interaction_at_grid_point(self._collision._g_skip_reduced)
                         self._collision.run()
                         self.assign_perturbation_at_grid_point(s, g, t)
                         self.print_calculation_progress(g)

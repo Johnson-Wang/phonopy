@@ -1,4 +1,4 @@
-#include <lapacke.h>
+#include <lapacke.h>thm_get_integration_weight
 #include <math.h>
 #include "phonoc_array.h"
 #include "phonoc_math.h"
@@ -26,51 +26,43 @@ void reciprocal_to_normal(double *fc3_normal_squared,
 			  const int *band_indices,
 			  const int num_band0,
 			  const int num_band,
-                          const int *atc_rec, //inter-atomic triplets cut in the reciprocal force constants
+              const int *atc_rec, //inter-atomic triplets cut in the reciprocal force constants
+              const char *g_skip,
 			  const double cutoff_frequency,
 			  const double cutoff_hfrequency,
-                          const double cutoff_delta)
+              const double cutoff_delta)
 {
   int i, j, k, bi, num_atom;
   double fff;
 
   num_atom = num_band / 3;
-
+  for (i=0; i< num_band0 * num_band * num_band; i++)
+    fc3_normal_squared[i] = 0;
   for (i = 0; i < num_band0; i++) {
     bi = band_indices[i];
     if (freqs0[bi] > cutoff_frequency && freqs0[bi] < cutoff_hfrequency) { // freqs0 limited in a range 
       for (j = 0; j < num_band; j++) {
-	if (freqs1[j] > cutoff_frequency) {
-	  for (k = 0; k < num_band; k++) {
-	    if (freqs2[k] > cutoff_frequency) {
+        if (freqs1[j] > cutoff_frequency) {
+          for (k = 0; k < num_band; k++) {
+            if (g_skip[i * num_band * num_band + j * num_band + k]) continue;
+            if (freqs2[k] > cutoff_frequency) {
               if (fabs(freqs0[bi] + freqs1[j] - freqs2[k]) > cutoff_delta &&
                   fabs(freqs0[bi] - freqs1[j] + freqs2[k]) > cutoff_delta &&
-                  fabs(-freqs0[bi] + freqs1[j] + freqs2[k]) > cutoff_delta){
-                    fc3_normal_squared[i*num_band*num_band+j*num_band+k]=0;
+                  fabs(-freqs0[bi] + freqs1[j] + freqs2[k]) > cutoff_delta)
                     continue;
-                  }
-	      fff = freqs0[bi] * freqs1[j] * freqs2[k];
-	      fc3_normal_squared[i * num_band * num_band +
-				 j * num_band +
-				 k] =
-		fc3_sum_squared(bi, j, k,
-				eigvecs0, eigvecs1, eigvecs2,
-				fc3_reciprocal,
-                                atc_rec,
-				masses,
-				num_atom) / fff;
-	    }
-	  }
-	} else {
-	  for (k = 0; k < num_band; k++) {
-	    fc3_normal_squared[i * num_band * num_band +
-			       j * num_band + k] = 0;
-	  }
-	}
-      }
-    } else {
-      for (j = 0; j < num_band * num_band; j++) {
-	fc3_normal_squared[i * num_band * num_band + j] = 0;
+              fff = freqs0[bi] * freqs1[j] * freqs2[k];
+              fc3_normal_squared[i * num_band * num_band +
+                     j * num_band +
+                     k] =
+                fc3_sum_squared(bi, j, k,
+                        eigvecs0, eigvecs1, eigvecs2,
+                        fc3_reciprocal,
+                        atc_rec,
+                        masses,
+                        num_atom) / fff;
+            }
+          }
+        }
       }
     }
   }    
