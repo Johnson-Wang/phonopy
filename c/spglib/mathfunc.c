@@ -446,6 +446,31 @@ void mat_free_VecDBL( VecDBL * vecdbl )
   vecdbl = NULL;
 }
 
+VecINT * mat_alloc_VecINT( const int size )
+{
+  VecINT *vecint;
+  vecint = (VecINT*) malloc( sizeof( VecINT ) );
+  vecint->size = size;
+  if ( size > 0 ) {
+    if ( ( vecint->vec = (int (*)[3]) malloc( sizeof(int[3]) * size) )
+	 == NULL ) {
+      warning_print("spglib: Memory could not be allocated ");
+      warning_print("(VecINT, line %d, %s).\n", __LINE__, __FILE__);
+      exit(1);
+    }
+  }
+  return vecint;
+}
+
+void mat_free_VecINT( VecINT * vecint )
+{
+  if ( vecint->size > 0 ) {
+    free( vecint->vec );
+    vecint->vec = NULL;
+  }
+  free( vecint );
+  vecint = NULL;
+}
 
 int mat_is_int_matrix( SPGCONST double mat[3][3], double symprec )
 {

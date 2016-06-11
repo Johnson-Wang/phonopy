@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <omp.h>
 #include "phonoc_array.h"
 #include "phonoc_utils.h"
 #include "phonon3_h/kappa.h"
@@ -441,16 +442,20 @@ void collision_degeneracy_grid(double *scatt,
         ndeg = l - k; // number of degenerate states
 
         //Take the average of the degenerate states
-        for (m = 0; m < num_band; m++)
-          scatt_temp[m] /= ndeg;
-
-        //assign the new value of scatt
-        for (l = k; l < k + ndeg; l++)
+        if (ndeg > 1)
+        {
           for (m = 0; m < num_band; m++)
-            scatt[i * nbb + l * num_band + m] = scatt_temp[m];
+            scatt_temp[m] /= ndeg;
+
+          //assign the new value of scatt
+          for (l = k; l < k + ndeg; l++)
+            for (m = 0; m < num_band; m++)
+              scatt[i * nbb + l * num_band + m] = scatt_temp[m];
+
+        }
         k += ndeg;
       }
-      //Repeate the last step but for another axis
+      //Repeat the last step but for another axis
       deg = degeneracy + grid_points2[i] * num_band;  //second phonon
       k = 0;
       while(k<num_band)
@@ -468,11 +473,14 @@ void collision_degeneracy_grid(double *scatt,
             break;
         }
         ndeg = l - k;
-        for (m = 0; m < num_band; m++)
-          scatt_temp[m] /= ndeg;
-        for (l = k; l < k + ndeg; l++)
+        if (ndeg > 1)
+        {
           for (m = 0; m < num_band; m++)
-            scatt[i * nbb + m * num_band + l] = scatt_temp[m];
+            scatt_temp[m] /= ndeg;
+          for (l = k; l < k + ndeg; l++)
+            for (m = 0; m < num_band; m++)
+              scatt[i * nbb + m * num_band + l] = scatt_temp[m];
+        }
         k += ndeg;
       }
   }

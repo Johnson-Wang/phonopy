@@ -14,6 +14,7 @@ import yaml
 from optparse import OptionParser
 from phonopy.interface.vasp import read_vasp
 from phonopy.structure.cells import get_supercell, get_distance, Primitive
+from phonopy.harmonic.dynamical_matrix import get_smallest_vectors, get_equivalent_smallest_vectors
 import pylab as pl
 import matplotlib.cm as cm
 import itertools
@@ -50,6 +51,8 @@ parser.add_option("--ddefine", "--distance_define", dest="ddefine", type="string
                    help="Set the distance definition for fc3 (min, max, cir or hydraulic)")
 parser.add_option("--dirt","--dir", dest="dirt", type="string", default=None,
                    help="The direction tensor (e.g. 'xx', 'yy', 'zz' for fc2 or 'xxx', 'yyy' for fc3). If not specified, a generalized norm is calculated.")
+parser.add_option("--projection", "--proj", dest="projection", type="string", default=None,
+                   help="The projection direction of the distance vector")
 parser.add_option('-r',"--relative", dest="is_relative", action="store_true",
                    help="Set the relative value as the vertical axis")
 parser.add_option('--log', dest="is_log", action="store_true",
@@ -133,7 +136,14 @@ if options.dirt is not None:
             elif len(dirt) == 2:
                 print "Error! The given direction tensor components are not enough"
                 sys.exit(1)
-    
+if options.projection is not None:
+    projection_string = options.projection.replace(",", "").replace(" ", "")
+    if projection_string[0] not in dir_map.keys():
+        print "Error: The projection is set incorrectly!"
+        sys.exit(1)
+    projection = dir_map[projection_string[0]]
+else:
+    projection = None
 if options.dirt is not None and options.is_log:
     print "Warning: The dirt and log arguments are not compatible"
     print "All the values on the graph are set as positive"
@@ -237,7 +247,18 @@ if mode == 2:
     else:
         self_trace = 1.0 
     for i in np.arange(num_atom_super):
-        distance[i] = get_distance(supercell, index_super, i)
+        if projection is not None:
+            vectors = \
+            get_equivalent_smallest_vectors(i, index_super,
+                                            supercell=supercell,
+                                            primitive_lattice=primitive.get_cell(),
+                                            symprec=1e-5)
+            vectors_cart = np.dot(vectors, primitive.get_cell())
+            project_vector = np.eye(3)[projection]
+            distance[i] = np.abs(np.dot(vectors_cart, project_vector)).min()
+        else:
+            distance[i] = get_distance(supercell, index_super, i)
+
         if dirt is not None:
             fc_temp = fc[index_super, i, dirt[0], dirt[1]]
         else:
@@ -323,7 +344,7 @@ elif mode == 3:
         else:
             self_trace = fc[index_super, index_super, index_super, dirt[0], dirt[1], dirt[2]]
         print "Self-interaction strength for the center atom: %f (eV/A^3)"%self_trace
-        if np.abs(self._trace) < 1e-7:
+        if np.abs(self_trace) < 1e-7:
             print "Warning: Self-interaction strength too small"
             print "Changing to absolute value instead"
             self_trace = 1.0

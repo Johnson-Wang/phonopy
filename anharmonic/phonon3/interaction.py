@@ -319,12 +319,12 @@ class Interaction:
                 self._interaction_strength_reduced = np.zeros(
                     (len(self._triplets_at_q_reduced), len(self._band_indices), num_band, num_band),
                     dtype='double')
-                # if g_skip is None:
-                #     g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
+                if g_skip is None:
+                    g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
                 if lang == 'C':
-                    self._run_c()
+                    self._run_c(g_skip=g_skip)
                 else:
-                    self._run_py()
+                    self._run_py(g_skip=g_skip)
                 self._amplitude_all[undone_num] = self._interaction_strength_reduced[:]
                 import anharmonic._phono3py as phono3c
                 phono3c.interaction_from_reduced(self._interaction_strength,
@@ -371,6 +371,9 @@ class Interaction:
 
     def get_triplets_at_q(self):
         return self._triplets_at_q, self._weights_at_q
+
+    def get_triplets_done(self):
+        return self._triplets_done
 
     def get_triplets_sequence_at_q_disperse(self):
         return self._triplet_sequence_at_grid
@@ -449,6 +452,7 @@ class Interaction:
             self._triplets_at_q = self._triplets[self._i]
             self._weights_at_q = self._weights[self._i]
             self._triplets_address = self._grid_address[self._triplets_at_q]
+
         else:
             reciprocal_lattice = np.linalg.inv(self._primitive.get_cell())
             if self._is_nosym:
@@ -601,11 +605,25 @@ class Interaction:
                 sec_rot_sum = self._kpoint_operations[pgoi_at_q].sum(axis=0)
                 inv_rot_sums.append(sec_rot_sum)
 
+
+
+
             unique_triplet_num, triplets_mappings, triplet_sequence = reduce_triplets_by_permutation_symmetry(crude_triplets,
                                                     self._mesh,
                                                     first_mapping=self._grid_mapping,
                                                     first_rotation=self._kpoint_operations[self._grid_mapping_rot],
                                                     second_mapping=np.vstack(second_mappings))
+
+            #debugging
+            # unique_triplets = np.vstack(self._triplets)[unique_triplet_num]
+            # inv_lat = np.linalg.inv(self._primitive.get_cell())
+            # for g, grid_point in enumerate(grid_points):
+            #     triplets = self._triplets[g]
+            #     triplets_from_uniq = unique_triplets[triplets_mappings[g]]
+            #     triplet_sum = self._grid_address[triplets].sum(axis=1)
+            #     triplet_uniqsum = self._grid_address[triplets_from_uniq].sum(axis=1)
+            #     if not np.allclose(np.sum(np.dot(triplet_sum, inv_lat) ** 2, axis=1), np.sum(np.dot(triplet_uniqsum, inv_lat) ** 2, axis=1)):
+            #         print
 
             print "Number of total unique triplets after permutation symmetry: %d/ %d" %(len(unique_triplet_num), total_triplet_num)
             # print "Number of total unique pairs after permutation symmetry: %d/%d" %(len(uniq_pairs_num), total_triplet_num)
@@ -810,5 +828,5 @@ class Interaction:
             write_amplitude_to_hdf5_all(self.get_amplitude_all(),
                                         self._mesh,
                                         is_nosym=self.is_nosym())
-            self.set_is_read_amplitude(True)
-            self.set_is_write_amplitude(False)
+        self.set_is_read_amplitude(True)
+        self.set_is_write_amplitude(False)

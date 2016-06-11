@@ -289,7 +289,7 @@ def get_distance(atoms, a0, a1, tolerance=1e-5):
     for pos in scaled_pos:
         pos -= np.rint(pos)
 
-    # Look for the shortest one in surrounded 3x3x3 cells 
+    # Look for the shortest one in surrounded 3x3x3 cells
     distances = []
     for i in (-1, 0, 1):
         for j in (-1, 0, 1):

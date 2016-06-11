@@ -16,6 +16,11 @@ typedef struct {
   double (*vec)[3];
 } VecDBL;
 
+typedef struct {
+  int size;
+  int (*vec)[3];
+} VecINT;
+
 double mat_get_determinant_d3(SPGCONST double a[3][3]);
 int mat_get_determinant_i3(SPGCONST int a[3][3]);
 int mat_get_trace_i3( SPGCONST int a[3][3] );
@@ -84,6 +89,8 @@ MatINT * mat_alloc_MatINT(const int size);
 void mat_free_MatINT( MatINT * matint );
 VecDBL * mat_alloc_VecDBL(const int size);
 void mat_free_VecDBL( VecDBL * vecdbl );
+VecINT * mat_alloc_VecINT(const int size);
+void mat_free_VecINT( VecINT * vecint );
 int mat_is_int_matrix( SPGCONST double mat[3][3], double symprec );
 int mat_index_from_Iarray(const int *a, const int length, const int value);
 #endif

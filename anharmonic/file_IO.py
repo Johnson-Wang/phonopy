@@ -918,6 +918,7 @@ def write_kappa_to_hdf5(gamma,
                         temperature,
                         mesh,
                         frequency=None,
+                        eigenvector=None,
                         group_velocity=None,
                         heat_capacity=None,
                         kappa=None,
@@ -942,6 +943,8 @@ def write_kappa_to_hdf5(gamma,
     w = h5py.File("kappa" + suffix + ".hdf5", 'w')
     w.create_dataset('gamma', data=gamma)
     w.create_dataset('frequency', data=frequency)
+    if eigenvector is not None:
+        w.create_dataset('eigenvector', data=eigenvector)
     w.create_dataset('temperature', data=temperature)
     w.create_dataset('group_velocity', data=group_velocity)
     if heat_capacity is not None:

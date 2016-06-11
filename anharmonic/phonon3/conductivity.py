@@ -90,6 +90,7 @@ class Conductivity:
         self._read_gamma = False
         self._read_gamma_iso = False
         self._frequencies = None
+        self._eigenvectors = None
         self._gv = None
         self._gamma_iso = None
         volume = self._primitive.get_volume()
@@ -122,8 +123,8 @@ class Conductivity:
         pass
 
     def get_frequencies(self):
-        return self._frequencies[self._grid_points]
-        
+        return self._frequencies
+
     def get_qpoints(self):
         return self._qpoints
             
@@ -245,6 +246,7 @@ class Conductivity:
         self._grid_point_count = 0
         self._pp.set_phonons(self._grid_points)
         self._frequencies = self._pp.get_phonons()[0][self._grid_points]
+        self._eigenvectors = None
         self._degeneracies = self._pp.get_degeneracy()[self._grid_points]
         if self._write_tecplot:
             self._dim = np.count_nonzero(np.array(self._mesh)>1)

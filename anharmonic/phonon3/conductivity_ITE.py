@@ -225,7 +225,7 @@ class conductivity_ITE(Conductivity):
                             else:
                                 self._collision.set_asigma()
                         self._collision.set_integration_weights()
-                        self._collision.run_interaction_at_grid_point(self._collision._g_skip_reduced)
+                        self._collision.run_interaction_at_grid_point(self._collision._g_skip)
                         self._collision.run()
                         self.assign_perturbation_at_grid_point(s, g, t)
                         self.print_calculation_progress(g)

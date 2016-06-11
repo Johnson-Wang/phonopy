@@ -69,8 +69,7 @@ class TetrahedronMesh:
             self._grid_order = [1, mesh[0], mesh[0] * mesh[1]]
         else:
             self._grid_order = grid_order
-        self._dimension = np.count_nonzero(np.array(mesh)>1)
-        self._dimension = 3
+
         self._ir_grid_points = None
         self._gp_ir_index = None
 
@@ -107,10 +106,8 @@ class TetrahedronMesh:
             (num_freqs, num_band, num_ir_grid_points), dtype='double')
 
         reciprocal_lattice = np.linalg.inv(self._cell.get_cell())
-        if self._dimension == 3:
-            self._tm = TetrahedronMethod(reciprocal_lattice, mesh=self._mesh)
-        elif self._dimension == 1:
-            self._tm = SegmentsMethod(reciprocal_lattice, mesh=self._mesh)
+        self._tm = TetrahedronMethod(reciprocal_lattice, mesh=self._mesh)
+
         self._relative_grid_address = self._tm.get_tetrahedra()
 
         for i, gp in enumerate(self._ir_grid_points):

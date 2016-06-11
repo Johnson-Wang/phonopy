@@ -193,8 +193,10 @@ class Mesh:
 
         self._eigenvalues = None
         self._eigenvectors = None
+        self._band_order = None
         self._set_eigenvalues()
-        self._set_band_connection()
+        if self._is_band_connection:
+            self._set_band_connection()
 
         self._group_velocities = None
         if group_velocity is not None:
@@ -366,8 +368,8 @@ class Mesh:
         for id in indicesd:
             j = np.argmin(np.sum((nodegq-qpoints[id])**2, axis=-1))
             ij = indicesn[j]
-            if (self._qpoints[id] == np.array([0.48, 0.48, 0])).all():
-                self._estimate_band_connection(np.array([0.2, 0.2, 0]), np.array([0.48, 0.48, 0]), np.array([0,1,2,3,4,5]))
+            # if (self._qpoints[id] == np.array([0.48, 0.48, 0])).all():
+            #     self._estimate_band_connection(np.array([0.2, 0.2, 0]), np.array([0.48, 0.48, 0]), np.array([0,1,2,3,4,5]))
             bo = self._estimate_band_connection(self._qpoints[ij],
                                           self._qpoints[id],
                                           band_order[ij])

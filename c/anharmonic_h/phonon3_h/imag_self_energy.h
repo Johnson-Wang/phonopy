@@ -25,7 +25,7 @@ void get_imag_self_energy_at_bands(double *imag_self_energy,
 				   const double *asigma,
 				   const double temperature,
 				   const double unit_conversion_factor,
-                                   const double cutoff_delta,
+                   const double cutoff_delta,
 				   const double cutoff_frequency,
 				   const double cutoff_hfrequency,
 				   const double cutoff_gamma);

@@ -45,20 +45,29 @@ def is_sequence(a,b, diff=0.49):
 def estimate_band_connection(prev_eigvecs, eigvecs, prev_band_order,degenerate_sets=None):
     if degenerate_sets == None:
         degenerate_sets=[[i] for i in range(len(prev_band_order))]
-    metric = np.abs(np.dot(prev_eigvecs.conjugate().T, eigvecs))
-    connection_order = []
-    indices = range(len(metric))
-    indices.reverse()
-    for overlaps in metric:
-        maxval = 0
-        for i in indices:
-            val = overlaps[i]
-            if i in connection_order:
-                continue
-            if val > maxval:
-                maxval = val
-                maxindex = i
-        connection_order.append(maxindex)
+    metric = np.abs(np.dot(prev_eigvecs.conj().T, eigvecs))
+    # metric2 = np.abs(np.dot(prev_eigvecs.T, eigvecs))
+    # if not (np.argmax(metric, axis=1) == np.argmax(metric2, axis=1)).all():
+    #     print
+
+
+    # connection_order = []
+    # indices = range(len(metric))
+    # indices.reverse()
+    connection_order = np.argmax(metric, axis=1)
+    # for overlaps in metric:
+    #     maxval = 0
+    #     for i in indices:
+    #         val = overlaps[i]
+    #         if i in connection_order:
+    #             continue
+    #         if val > maxval:
+    #             maxval = val
+    #             maxindex = i
+    #     connection_order.append(maxindex)
+    # for i in range(len(prev_eigvecs)):
+    #     print np.dot(prev_eigvecs.conj().T, eigvecs)[i, connection_order[i]],
+    # print
 
     band_order = np.array([connection_order[x] for x in prev_band_order], dtype=int)
     for j, deg in enumerate(degenerate_sets):
@@ -322,6 +331,7 @@ class BandStructure:
             #                                                           self._band_order,
             #                                                           irreps._get_degenerate_sets())
             #     characters_prev=characters
+
                 eigvals_on_path.append(eigvals[self._band_order])
                 eigvecs_on_path.append((eigvecs.T)[self._band_order].T)
                 if self._group_velocity is not None:

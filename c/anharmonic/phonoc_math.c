@@ -1,6 +1,9 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
 #include <lapacke.h>
 #include "phonoc_math.h"
-
+#include "phonoc_array.h"
 lapack_complex_double
 phonoc_complex_prod(const lapack_complex_double a,
 		    const lapack_complex_double b)

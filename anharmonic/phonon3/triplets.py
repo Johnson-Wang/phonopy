@@ -29,21 +29,6 @@ def get_triplets_at_q(grid_point,
      bz_map)=\
         get_BZ_triplets_at_q(grid_point, mesh, reciprocal_lattice, grid_address, grid_map)
 
-    # map_triplets, map_q, grid_address = spg.get_triplets_reciprocal_mesh_at_q(
-    #     grid_point,
-    #     mesh,
-    #     point_group,
-    #     is_time_reversal=is_time_reversal)
-    # bz_grid_address, bz_map = spg.relocate_BZ_grid_address(grid_address,
-    #                                                        mesh,
-    #                                                        primitive_lattice)
-    # triplets_at_q, weights = spg.get_BZ_triplets_at_q(
-    #     grid_point,
-    #     bz_grid_address,
-    #     bz_map,
-    #     map_triplets,
-    #     mesh)
-
     assert np.prod(mesh) == weights.sum(), \
         "Num grid points %d, sum of weight %d" % (
                     np.prod(mesh), weights.sum())
@@ -118,30 +103,6 @@ def get_nosym_triplets_at_q(grid_point,
 
     return triplets_at_q, weights, bz_grid_address, bz_map, map_q
 
-# def get_nosym_triplets_at_q(grid_point, mesh):
-#     grid_address = get_grid_address(mesh)
-#
-#     weights = np.ones(len(grid_address), dtype='intc')
-#     third_q = np.zeros_like(weights)
-#
-#     # triplets = np.zeros((len(grid_address), 3), dtype='intc')
-#     # for i, g1 in enumerate(grid_address):
-#     #     g2 = - (grid_address[grid_point] + g1)
-#     #     q = get_grid_point_from_address(g2, mesh)
-#     #     triplets[i] = [grid_point, i, q]
-#
-#     for i, g1 in enumerate(grid_address):
-#         g2 = - (grid_address[grid_point] + g1)
-#         third_q[i] = get_grid_point_from_address(g2, mesh)
-#     triplets = spg.get_grid_triplets_at_q(
-#         grid_point,
-#         grid_address,
-#         third_q,
-#         weights,
-#         mesh)
-#     grid_address = get_grid_address([x + (x % 2 == 0) for x in mesh])
-#
-#     return triplets, weights, grid_address
 
 def get_grid_address(mesh, is_time_reversal=False, is_shift=np.zeros(3, dtype='intc'), is_return_map=False):
     grid_mapping_table, grid_address = spg.get_stabilized_reciprocal_mesh(
@@ -241,37 +202,45 @@ def _set_triplets_integration_weights_c(g,
                                         interaction,
                                         frequency_points,
                                         neighboring_phonons=True,
-                                        triplets_at_q=None):
+                                        triplets_at_q=None,
+                                        is_triplet_symmetry=True):
     import anharmonic._phono3py as phono3c
     if triplets_at_q == None:
         triplets_at_q = interaction.get_triplets_at_q()[0]
     reciprocal_lattice = np.linalg.inv(interaction.get_primitive().get_cell())
     mesh = interaction.get_mesh_numbers()
-    dimension = np.count_nonzero(np.array(mesh)-1)
-    dimension = 3
-    if dimension == 3:
-        thm = TetrahedronMethod(reciprocal_lattice, mesh=mesh)
-    elif dimension == 1:
-        thm = SegmentsMethod(reciprocal_lattice, mesh=mesh)
-    # thm = TetrahedronMethod(reciprocal_lattice, mesh=mesh)
+    thm = TetrahedronMethod(reciprocal_lattice, mesh=mesh)
 
     grid_address = interaction.get_grid_address()
     bz_map = interaction.get_bz_map()
     if neighboring_phonons:
         unique_vertices = thm.get_unique_tetrahedra_vertices()
-        for i, j in zip((1, 2), (1, -1)):
-            neighboring_grid_points = np.zeros(
-                len(unique_vertices) * len(triplets_at_q), dtype='intc')
-            phono3c.neighboring_grid_points(
+        for i in (0,1,2): # index inside a triplet
+            for j in (-1,1):
+                neighboring_grid_points = np.zeros(
+                    len(unique_vertices) * len(np.unique(triplets_at_q[:, i])), dtype='intc')
+                phono3c.neighboring_grid_points(
                 neighboring_grid_points,
-                triplets_at_q[:, i].flatten(),
+                np.unique(triplets_at_q[:, i]),
                 j * unique_vertices,
                 mesh,
                 grid_address,
                 bz_map)
-            interaction.set_phonons(np.unique(neighboring_grid_points))
+                interaction.set_phonons(np.unique(neighboring_grid_points))
 
-    if dimension == 3:
+        # for i, j in zip((1, 2), (1, -1)):
+        #     neighboring_grid_points = np.zeros(
+        #         len(unique_vertices) * len(triplets_at_q), dtype='intc')
+        #     phono3c.neighboring_grid_points(
+        #         neighboring_grid_points,
+        #         triplets_at_q[:, i].flatten(),
+        #         j * unique_vertices,
+        #         mesh,
+        #         grid_address,
+        #         bz_map)
+        #     interaction.set_phonons(np.unique(neighboring_grid_points))
+
+    if not is_triplet_symmetry:
         phono3c.triplets_integration_weights(
             g,
             frequency_points,
@@ -281,10 +250,9 @@ def _set_triplets_integration_weights_c(g,
             interaction.get_phonons()[0],
             grid_address,
             bz_map)
-    elif dimension == 1:
-        phono3c.triplets_integration_weights_1D(
+    else:
+        phono3c.triplets_integration_weights_sym(
             g,
-            frequency_points,
             thm.get_tetrahedra(),
             mesh,
             triplets_at_q,
@@ -297,13 +265,7 @@ def _set_triplets_integration_weights_py(g, interaction, frequency_points, tripl
         triplets_at_q = interaction.get_triplets_at_q()[0]
     reciprocal_lattice = np.linalg.inv(interaction.get_primitive().get_cell())
     mesh = interaction.get_mesh_numbers()
-    dimension = np.count_nonzero(np.array(mesh) > 1)
-    dimension = 3
-    if dimension == 3:
-        thm = TetrahedronMethod(reciprocal_lattice, mesh=mesh)
-    elif dimension == 1:
-        thm = SegmentsMethod(reciprocal_lattice, mesh=mesh)
-    # thm = TetrahedronMethod(reciprocal_lattice, mesh=mesh)
+    thm = TetrahedronMethod(reciprocal_lattice, mesh=mesh)
     grid_address = interaction.get_grid_address()
     tetrahedra_vertices = get_tetrahedra_vertices(
         thm.get_tetrahedra(),
@@ -336,12 +298,8 @@ def get_tetrahedra_vertices(relative_address,
                             grid_address):
     grid_order = [1, mesh[0], mesh[0] * mesh[1]]
     num_triplets = len(triplets_at_q)
-    dimension = np.count_nonzero(np.array(mesh)>1)
-    dimension = 3
-    if dimension == 3:
-        vertices = np.zeros((num_triplets, 2, 24, 4), dtype='intc')
-    elif dimension == 1:
-        vertices = np.zeros((num_triplets, 2, 2, 2), dtype="intc")
+
+    vertices = np.zeros((num_triplets, 2, 24, 4), dtype='intc')
     for i, tp in enumerate(triplets_at_q):
         for j, adrs_shift in enumerate(
                 (relative_address, -relative_address)):

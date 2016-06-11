@@ -200,7 +200,6 @@ get_ir_reciprocal_mesh_openmp(int grid_points[][3],
 			      const int is_shift[3],
 			      SPGCONST PointSymmetry * point_symmetry);
 static int get_third_q_of_triplets_at_q(int bz_address[3][3],
-					const int q_index,
 					const int bz_map[],
 					const int mesh[3],
 					const int bzmesh[3],
@@ -263,6 +262,12 @@ static int get_BZ_triplets_at_q(int triplets[][3],
 				const int map_triplets[],
 				const int num_map_triplets,
 				const int mesh[3]);
+static void translated_grid_point_map(int bzgp[NUM_DIM_SEARCH],
+                                      const int bz_grid_address[3],
+                                      const int bz_map[],
+                                      const int mesh[3],
+                                      const int bzmesh[3],
+                                      const int bzmesh_double[3]);
 int kpt_get_irreducible_kpoints(int map[],
 				SPGCONST double kpoints[][3],
 				const int num_kpoint,
@@ -1656,7 +1661,7 @@ static int get_BZ_triplets_at_q(int triplets[][3],
       num_ir++;
     }
   }
- 
+
 #pragma omp parallel for private(j, k, bz_address, bz_address_double)
   for (i = 0; i < num_ir; i++) {
     for (j = 0; j < 3; j++) {
@@ -1664,16 +1669,11 @@ static int get_BZ_triplets_at_q(int triplets[][3],
       bz_address[1][j] = bz_grid_address[ir_grid_points[i]][j];
       bz_address[2][j] = - bz_address[0][j] - bz_address[1][j];
     }
-    for (j = 2; j > -1; j--) {
-      if (get_third_q_of_triplets_at_q(bz_address,
-    				       j,
-    				       bz_map,
-    				       mesh,
-    				       bzmesh,
-    				       bzmesh_double) == 0) {
-    	break;
-      }
-    }
+    get_third_q_of_triplets_at_q(bz_address,
+                               bz_map,
+                               mesh,
+                               bzmesh,
+                               bzmesh_double);
     for (j = 0; j < 3; j++) {
       for (k = 0; k < 3; k++) {
 	bz_address_double[k] = bz_address[j][k] * 2;
@@ -1689,17 +1689,81 @@ static int get_BZ_triplets_at_q(int triplets[][3],
   return num_ir;
 }
 
+//static int get_third_q_of_triplets_at_q(int bz_address[3][3],
+//					const int q_index,
+//					const int bz_map[],
+//					const int mesh[3],
+//					const int bzmesh[3],
+//					const int bzmesh_double[3])
+//{
+//  int i, j, smallest_g, smallest_index, sum_g, delta_g[3];
+//  int bzgp[NUM_DIM_SEARCH], bz_address_double[3];
+//
+//  get_vector_modulo(bz_address[q_index], mesh);
+//  for (i = 0; i < 3; i++) {
+//    delta_g[i] = 0;
+//    for (j = 0; j < 3; j++) {
+//      delta_g[i] += bz_address[j][i];
+//    }
+//    delta_g[i] /= mesh[i];
+//  }
+//
+//  for (i = 0; i < NUM_DIM_SEARCH; i++) {
+//    for (j = 0; j < 3; j++) {
+//      bz_address_double[j] = (bz_address[q_index][j] +
+//			   search_space[i][j] * mesh[j]) * 2;
+//    }
+//    for (j = 0; j < 3; j++) {
+//      if (bz_address_double[j] < 0) {
+//	bz_address_double[j] += bzmesh_double[j];
+//      }
+//    }
+//    get_vector_modulo(bz_address_double, bzmesh_double);
+//    bzgp[i] = bz_map[get_grid_point_double_mesh(bz_address_double, bzmesh)];
+//  }
+//
+//  for (i = 0; i < NUM_DIM_SEARCH; i++) {
+//    if (bzgp[i] != -1) {
+//      goto escape;
+//    }
+//  }
+//  warning_print("******* Warning *******\n");
+//  warning_print(" No third-q was found.\n");
+//  warning_print("******* Warning *******\n");
+//
+// escape:
+//
+//  smallest_g = 4;
+//  smallest_index = 0;
+//
+//  for (i = 0; i < NUM_DIM_SEARCH; i++) {
+//    if (bzgp[i] > -1) { /* q'' is in BZ */
+//      sum_g = (abs(delta_g[0] + search_space[i][0]) +
+//	       abs(delta_g[1] + search_space[i][1]) +
+//	       abs(delta_g[2] + search_space[i][2]));
+//      if (sum_g < smallest_g) {
+//	smallest_index = i;
+//	smallest_g = sum_g;
+//      }
+//    }
+//  }
+//
+//  for (i = 0; i < 3; i++) {
+//    bz_address[q_index][i] += search_space[smallest_index][i] * mesh[i];
+//  }
+//
+//  return smallest_g;
+//}
 static int get_third_q_of_triplets_at_q(int bz_address[3][3],
-					const int q_index,
 					const int bz_map[],
 					const int mesh[3],
 					const int bzmesh[3],
 					const int bzmesh_double[3])
 {
-  int i, j, smallest_g, smallest_index, sum_g, delta_g[3];
-  int bzgp[NUM_DIM_SEARCH], bz_address_double[3];
+  int i, j, k, smallest_g=4, smallest_index[3]={0,0,0}, sum_g, delta_g[3], is_found=0;
+  int bzgp0[NUM_DIM_SEARCH],bzgp1[NUM_DIM_SEARCH],bzgp2[NUM_DIM_SEARCH], bz_address_double[3];
 
-  get_vector_modulo(bz_address[q_index], mesh);
+  get_vector_modulo(bz_address[2], mesh);
   for (i = 0; i < 3; i++) {
     delta_g[i] = 0;
     for (j = 0; j < 3; j++) {
@@ -1707,50 +1771,67 @@ static int get_third_q_of_triplets_at_q(int bz_address[3][3],
     }
     delta_g[i] /= mesh[i];
   }
-  
-  for (i = 0; i < NUM_DIM_SEARCH; i++) {
+
+
+  translated_grid_point_map(bzgp0, bz_address[0], bz_map, mesh, bzmesh, bzmesh_double);
+
+  for (i = 0; i < NUM_DIM_SEARCH; i++)
+    if (bzgp0[i] != -1) {
+      is_found = 1;
+      translated_grid_point_map(bzgp1, bz_address[1], bz_map, mesh, bzmesh, bzmesh_double);
+      for (j=0; j<NUM_DIM_SEARCH; j++)
+        if (bzgp1[j] != -1)
+        {
+          translated_grid_point_map(bzgp2, bz_address[2], bz_map, mesh, bzmesh, bzmesh_double);
+          for (k=0; k<NUM_DIM_SEARCH; k++)
+            if (bzgp2[k] != -1)
+            {
+              sum_g = (abs(delta_g[0] + search_space[i][0]+ search_space[j][0]+ search_space[k][0]) +
+	            abs(delta_g[1] + search_space[i][1] + search_space[j][1] + search_space[k][1]) +
+	             abs(delta_g[2] + search_space[i][2] + search_space[j][2] + search_space[k][2]));
+	          if (sum_g < smallest_g) {
+	            smallest_index[0] = i; smallest_index[1] = j; smallest_index[2] = k;
+	          	smallest_g = sum_g;
+	          }
+	          if (smallest_g == 0) goto escape;
+            }
+        }
+    }
+
+  if (!is_found){
+    warning_print("******* Warning *******\n");
+    warning_print(" No third-q was found.\n");
+    warning_print("******* Warning *******\n");
+  }
+
+  escape:
+  for (i = 0; i < 3; i++)
+    for (j=0; j < 3; j ++)
+      bz_address[i][j] += search_space[smallest_index[i]][j] * mesh[j];
+
+  return smallest_g;
+}
+
+
+static void translated_grid_point_map(int bzgp[NUM_DIM_SEARCH],
+                                      const int bz_grid_address[3],
+                                      const int bz_map[],
+                                      const int mesh[3],
+                                      const int bzmesh[3],
+                                      const int bzmesh_double[3])
+{
+  int i, j, bz_address_double[3];
+  for (i=0; i< NUM_DIM_SEARCH; i++){
     for (j = 0; j < 3; j++) {
-      bz_address_double[j] = (bz_address[q_index][j] +
-			   search_space[i][j] * mesh[j]) * 2;
+          bz_address_double[j] = (bz_grid_address[j] +
+                 search_space[i][j] * mesh[j]) * 2;
     }
     for (j = 0; j < 3; j++) {
       if (bz_address_double[j] < 0) {
-	bz_address_double[j] += bzmesh_double[j];
+        bz_address_double[j] += bzmesh_double[j];
       }
     }
     get_vector_modulo(bz_address_double, bzmesh_double);
     bzgp[i] = bz_map[get_grid_point_double_mesh(bz_address_double, bzmesh)];
   }
-
-  for (i = 0; i < NUM_DIM_SEARCH; i++) {
-    if (bzgp[i] != -1) {
-      goto escape;
-    }
-  }
-  warning_print("******* Warning *******\n");
-  warning_print(" No third-q was found.\n");
-  warning_print("******* Warning *******\n");
-
- escape:
-
-  smallest_g = 4;
-  smallest_index = 0;
-
-  for (i = 0; i < NUM_DIM_SEARCH; i++) {
-    if (bzgp[i] > -1) { /* q'' is in BZ */
-      sum_g = (abs(delta_g[0] + search_space[i][0]) +
-	       abs(delta_g[1] + search_space[i][1]) +
-	       abs(delta_g[2] + search_space[i][2]));
-      if (sum_g < smallest_g) {
-	smallest_index = i;
-	smallest_g = sum_g;
-      }
-    }
-  }
-
-  for (i = 0; i < 3; i++) {
-    bz_address[q_index][i] += search_space[smallest_index][i] * mesh[i];
-  }
-
-  return smallest_g;
 }

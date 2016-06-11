@@ -879,7 +879,7 @@ static PyObject * get_reduced_triplets_permute_sym(PyObject *self, PyObject *arg
   PyArrayObject* first_mapping_py;
   PyArrayObject* first_rotation_py;
   PyArrayObject* second_mapping_py;
-  int (*triplets)[3], (*first_rotation)[3][3], num_irred_triplets; 
+  int (*triplets)[3], (*first_rotation)[3][3], num_irred_triplets;
   if (!PyArg_ParseTuple(args, "OOOOOOOOO",
                         &triplet_mappings_py,
 			&sequence_py,
@@ -929,7 +929,7 @@ static PyObject * get_reduced_pairs_permute_sym(PyObject *self, PyObject *args)
   PyArrayObject* first_mapping_py;
   PyArrayObject* first_rotation_py;
   PyArrayObject* second_mapping_py;
-  int (*pairs)[2], (*first_rotation)[3][3], num_irred_pairs; 
+  int (*pairs)[2], (*first_rotation)[3][3], num_irred_pairs;
   if (!PyArg_ParseTuple(args, "OOOOOOOOO",
                         &pairs_mappings,
 			&sequence_py,
@@ -953,7 +953,7 @@ static PyObject * get_reduced_pairs_permute_sym(PyObject *self, PyObject *args)
   const int* grid_points = (int*)grid_points_py->data;
   pairs = (int(*)[2])pairs_py->data;
   first_rotation = (int(*)[3][3])first_rotation_py->data;
-  
+
   num_irred_pairs = spg_reduce_pairs_permute_sym(pair_mappings,
 						       sequence,
 						       pairs,
