@@ -34,7 +34,7 @@
 
 import sys
 import numpy as np
-from phonopy.structure.tetrahedron_method import TetrahedronMethod, SegmentsMethod
+from phonopy.structure.tetrahedron_method import TetrahedronMethod
 from phonopy.structure.grid_points import extract_ir_grid_points
 
 def get_tetrahedra_frequencies(gp,
@@ -43,14 +43,21 @@ def get_tetrahedra_frequencies(gp,
                                grid_address,
                                relative_grid_address,
                                gp_ir_index,
-                               frequencies):
+                               frequencies,
+                               skip=None):
     num_adjacent, num_vertices = relative_grid_address.shape[:2]
     t_frequencies = np.zeros((frequencies.shape[1], num_adjacent, num_vertices), dtype='double')
+    if skip is None:
+        skip = np.zeros(len(relative_grid_address), dtype="bool")
     for i, t in enumerate(relative_grid_address):
+        if skip[i]:
+            continue
         address = t + grid_address[gp]
-        neighbors = np.dot(address % mesh, grid_order)
-        t_frequencies[:, i, :] = frequencies[gp_ir_index[neighbors]].T
+        neighbor = np.dot(address % mesh, grid_order)
+        t_frequencies[:, i, :] = frequencies[gp_ir_index[neighbor]].T
     return t_frequencies
+
+
 
 class TetrahedronMesh:
     def __init__(self,
@@ -77,7 +84,7 @@ class TetrahedronMesh:
         self._tetrahedra_frequencies = None
         self._integration_weights = None
         self._relative_grid_address = None
-
+        self._neighbor_grid_points = None
         self._prepare()
         
     def get_integration_weights(self):
@@ -106,18 +113,18 @@ class TetrahedronMesh:
             (num_freqs, num_band, num_ir_grid_points), dtype='double')
 
         reciprocal_lattice = np.linalg.inv(self._cell.get_cell())
-        self._tm = TetrahedronMethod(reciprocal_lattice, mesh=self._mesh)
+        self._tm = TetrahedronMethod(reciprocal_lattice, mesh=self._mesh, is_linear=True)
 
         self._relative_grid_address = self._tm.get_tetrahedra()
-
+        weight_correction = self._tm.get_weight_correction()[self._tm.get_center_indices()]
         for i, gp in enumerate(self._ir_grid_points):
+            self._set_tetrahedra_neighbors(gp)
             self._set_tetrahedra_frequencies(gp)
             for ib, frequencies in enumerate(self._tetrahedra_frequencies):
                 self._tm.set_tetrahedra_omegas(frequencies)
                 self._tm.run(self._frequency_points, value=value)
                 iw = self._tm.get_integration_weight()
-                self._integration_weights[:, ib, i] = iw
-
+                self._integration_weights[:, ib, i] = np.sum(iw * weight_correction, axis=(-1, -2))
         self._integration_weights /= np.prod(self._mesh)
 
     def _prepare(self):
@@ -132,12 +139,28 @@ class TetrahedronMesh:
         for i, gp in enumerate(self._grid_mapping_table):
             self._gp_ir_index[i] = ir_gp_indices[gp]
         
-    def _set_tetrahedra_frequencies(self, gp):
-        self._tetrahedra_frequencies = get_tetrahedra_frequencies(
+    def _set_tetrahedra_frequencies(self, gp, skip=None):
+        self._tetrahedra_frequencies= get_tetrahedra_frequencies(
             gp,
             self._mesh,
             self._grid_order,
             self._grid_address,
             self._relative_grid_address,
             self._gp_ir_index,
-            self._frequencies)
+            self._frequencies,
+            skip=skip)
+
+    def _set_tetrahedra_neighbors(self, gp):
+        num_adjacent, num_vertices = self._relative_grid_address.shape[:2]
+        rti = self._tm.get_relative_tetra_indices()
+        neighbors = np.zeros((num_adjacent, num_vertices), dtype="intc")
+        tetrahedra_indices = np.zeros(num_adjacent, dtype='intc')
+        for i, t in enumerate(self._relative_grid_address):
+            tetra_origin = self._grid_address[gp] + rti[i, :3]
+            origin_grid_point = np.dot(tetra_origin % self._mesh, self._grid_order)
+            tetrahedra_indices[i] = origin_grid_point * 6 + rti[i, 3]
+            address = t + self._grid_address[gp]
+            neighbor = np.dot(address % self._mesh, self._grid_order)
+            neighbors[i] = neighbor
+        self._neighbor_grid_points = neighbors
+        self._tetrahedra_indices = tetrahedra_indices

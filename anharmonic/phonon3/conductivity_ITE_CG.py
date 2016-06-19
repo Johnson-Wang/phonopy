@@ -3,6 +3,7 @@ import sys
 from phonopy.units import THz, kb_J, Angstrom, THzToEv, EV
 from anharmonic.phonon3.collision import Collision
 from anharmonic.phonon3.conductivity import Conductivity
+from anharmonic.phonon3.triplets import total_time
 unit_to_WmK = kb_J / Angstrom ** 3 * ((THz * Angstrom) * THzToEv * EV / kb_J) ** 2  / THz/ (2 * np.pi) # 2pi comes from the definition of tau
 np.seterr(divide="ignore")
 class conductivity_ITE_CG(Conductivity):
@@ -82,6 +83,7 @@ class conductivity_ITE_CG(Conductivity):
     def __iter__(self):
         return self
 
+    @total_time.timeit
     def next(self):
         if (self._is_converge ==True).all():
             print "All calculations have converged"
@@ -102,8 +104,11 @@ class conductivity_ITE_CG(Conductivity):
                 self.set_collision()
                 if self._ite_step == 0:
                     self.calculate_residual0_at_sigma_and_temp() # initialize the residual and the searching path
+                total_time.reset()
                 self.run_at_sigma_and_temp()
+                total_time.output()
         self.check_convergence()
+
         self.renew()
         self._ite_step += 1
         return self
@@ -122,7 +127,9 @@ class conductivity_ITE_CG(Conductivity):
                              3), dtype='double')
         self._collision_out = np.zeros((num_sigma, num_grid, num_temp, num_band), dtype="double")
         self._gamma = np.zeros((num_sigma, num_grid, num_temp, num_band), dtype="double")
+        total_time.reset()
         self.run_smrt_sigma_adaption()
+        total_time.output()
         if self._is_read_col:
             self._pp.release_amplitude_all()
 
@@ -172,6 +179,8 @@ class conductivity_ITE_CG(Conductivity):
                         self._collision.run_interaction_at_grid_point(self._collision.get_interaction_skip())
                         # self._collision.run_interaction_at_grid_point()
                         self._collision.run()
+                        print self._collision._gamma_all[0,0,0,3]
+                        sys.exit()
                         self.assign_perturbation_at_grid_point(s, g, t)
                         self.print_calculation_progress(g)
                     if asigma_step == 0 and (not self._is_read_col):
@@ -356,6 +365,10 @@ class conductivity_ITE_CG(Conductivity):
                 self.calculate_At_s_t_g(s, t, i) # sigma, temperature, grid
                 self.print_calculation_progress(i)
             # self._collision.write_collision_all(log_level=self._log_level)
+        self.calculate_cg_kernel()
+
+    @total_time.timeit
+    def calculate_cg_kernel(self):
         import anharmonic._phono3py as phono3c
         gz = np.zeros(3, dtype="double")
         phono3c.phonon_3_multiply_dvector_gb3_dvector_gb3(gz,
@@ -376,7 +389,6 @@ class conductivity_ITE_CG(Conductivity):
         self._F[self._isigma,:,self._itemp] = self._F_prev[self._isigma,:,self._itemp] + gz_over_ht * self._p_prev[self._isigma,:,self._itemp]
         self._r[self._isigma,:,self._itemp] = self._r_prev[self._isigma,:,self._itemp] - gz_over_ht * self._t_prev[self._isigma,:,self._itemp]
         self.calculate_gh_at_sigma_and_temp()
-
 
     def ite_init(self):
         self.smrt()

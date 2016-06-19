@@ -2,7 +2,41 @@ import numpy as np
 import phonopy.structure.spglib as spg
 from phonopy.units import THzToEv, Kb
 from phonopy.structure.symmetry import Symmetry
-from phonopy.structure.tetrahedron_method import TetrahedronMethod, SegmentsMethod
+from phonopy.structure.tetrahedron_method import TetrahedronMethod
+import time
+
+class Timeit():
+    def __init__(self):
+        self.time_dict = {}
+        self._is_print_each = False
+
+    def timeit(self, method):
+        name = method.__name__
+        if name not in self.time_dict.keys():
+            self.time_dict[name] = 0.
+
+        def timed(*args, **kw):
+            ts = time.time()
+            result = method(*args, **kw)
+            te = time.time()
+            if self._is_print_each:
+                print '%r %2.2f sec' % \
+                      (name, te-ts)
+            self.time_dict[name] += te - ts
+            return result
+        return timed
+
+    def output(self):
+        for key in self.time_dict.keys():
+            print '%r %2.2f sec' % \
+                  (key, self.time_dict[key])
+
+    def reset(self):
+        for key in self.time_dict.keys():
+            self.time_dict[key] = 0.
+
+total_time = Timeit()
+
 
 def gaussian(x, sigma):
     return 1.0 / np.sqrt(2 * np.pi) / sigma * np.exp(-x**2 / 2 / sigma**2)
@@ -130,6 +164,7 @@ def get_bz_grid_address(mesh, primitive_lattice, with_boundary=False, is_bz_map_
     else:
         return bz_grid_address[:np.prod(mesh)]
 
+@total_time.timeit
 def get_triplets_integration_weights(interaction,
                                      frequency_points,
                                      sigma_object,
@@ -185,6 +220,7 @@ def get_triplets_integration_weights(interaction,
                     g[2, i, :, j, k] = g2
 
     else:
+        # lang = 'py'
         if lang == 'C':
             _set_triplets_integration_weights_c(
                 g,
@@ -203,7 +239,7 @@ def _set_triplets_integration_weights_c(g,
                                         frequency_points,
                                         neighboring_phonons=True,
                                         triplets_at_q=None,
-                                        is_triplet_symmetry=True):
+                                        is_triplet_symmetry=False):
     import anharmonic._phono3py as phono3c
     if triplets_at_q == None:
         triplets_at_q = interaction.get_triplets_at_q()[0]
@@ -215,8 +251,8 @@ def _set_triplets_integration_weights_c(g,
     bz_map = interaction.get_bz_map()
     if neighboring_phonons:
         unique_vertices = thm.get_unique_tetrahedra_vertices()
-        for i in (0,1,2): # index inside a triplet
-            for j in (-1,1):
+        for i in (1, 2, 0): # index inside a triplet
+            for j in (1, -1):
                 neighboring_grid_points = np.zeros(
                     len(unique_vertices) * len(np.unique(triplets_at_q[:, i])), dtype='intc')
                 phono3c.neighboring_grid_points(
@@ -228,37 +264,31 @@ def _set_triplets_integration_weights_c(g,
                 bz_map)
                 interaction.set_phonons(np.unique(neighboring_grid_points))
 
-        # for i, j in zip((1, 2), (1, -1)):
-        #     neighboring_grid_points = np.zeros(
-        #         len(unique_vertices) * len(triplets_at_q), dtype='intc')
-        #     phono3c.neighboring_grid_points(
-        #         neighboring_grid_points,
-        #         triplets_at_q[:, i].flatten(),
-        #         j * unique_vertices,
-        #         mesh,
-        #         grid_address,
-        #         bz_map)
-        #     interaction.set_phonons(np.unique(neighboring_grid_points))
-
     if not is_triplet_symmetry:
         phono3c.triplets_integration_weights(
             g,
             frequency_points,
-            thm.get_tetrahedra(),
+            thm.get_tetrahedra().astype("intc").copy(),
+            thm.get_weight_correction().astype('double').copy(),
+            thm.get_center_indices().astype('intc').copy(),
             mesh,
             triplets_at_q,
             interaction.get_phonons()[0],
             grid_address,
-            bz_map)
+            bz_map,
+            thm._is_linear)
     else:
         phono3c.triplets_integration_weights_sym(
             g,
-            thm.get_tetrahedra(),
+            thm.get_tetrahedra().astype("intc").copy(),
+            thm.get_weight_correction().astype('double').copy(),
+            thm.get_center_indices().astype("intc").copy(),
             mesh,
             triplets_at_q,
             interaction.get_phonons()[0],
             grid_address,
-            bz_map)
+            bz_map,
+            thm._is_linear)
 
 def _set_triplets_integration_weights_py(g, interaction, frequency_points, triplets_at_q=None):
     if triplets_at_q == None:
@@ -299,7 +329,7 @@ def get_tetrahedra_vertices(relative_address,
     grid_order = [1, mesh[0], mesh[0] * mesh[1]]
     num_triplets = len(triplets_at_q)
 
-    vertices = np.zeros((num_triplets, 2, 24, 4), dtype='intc')
+    vertices = np.zeros((num_triplets, 2, 120, 20), dtype='intc')
     for i, tp in enumerate(triplets_at_q):
         for j, adrs_shift in enumerate(
                 (relative_address, -relative_address)):

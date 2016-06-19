@@ -12,7 +12,7 @@ from anharmonic.file_IO import write_triplets_to_hdf5, read_amplitude_from_hdf5_
     write_amplitude_to_hdf5_at_grid, write_amplitude_to_hdf5_all
 from phonopy.phonon.group_velocity import degenerate_sets
 import os, sys
-
+from anharmonic.phonon3.triplets import total_time
 def find_index(a, b): #index of b elements in a such that a[seq] = b
     return np.array([list(a).index(j) for j in b])
 
@@ -333,7 +333,7 @@ class Interaction:
                                                  self._triplets_sequence[self._i].astype("byte"))
                 self._triplets_done[undone_num] = True
 
-
+    # @total_time.timeit
     def set_phonons(self, grid_points=None, lang = "C"):
         if lang == "C":
             self._set_phonon_c(grid_points)
@@ -441,6 +441,7 @@ class Interaction:
     def get_triplets_sequence_at_grid(self):
         return self._triplets_sequence[self._i]
 
+    @total_time.timeit
     def set_grid_point(self, grid_point, i=None, stores_triplets_map=False):
         if i==None:
             self._grid_point = grid_point
@@ -824,9 +825,10 @@ class Interaction:
 
 
     def write_amplitude_all(self):
-        if self.get_is_write_amplitude() and self.get_amplitude_all() is not None:
-            write_amplitude_to_hdf5_all(self.get_amplitude_all(),
-                                        self._mesh,
-                                        is_nosym=self.is_nosym())
-        self.set_is_read_amplitude(True)
-        self.set_is_write_amplitude(False)
+        if self.get_is_write_amplitude():
+            if self.get_amplitude_all() is not None:
+                write_amplitude_to_hdf5_all(self.get_amplitude_all(),
+                                            self._mesh,
+                                            is_nosym=self.is_nosym())
+            self.set_is_read_amplitude(True)
+            self.set_is_write_amplitude(False)

@@ -1296,52 +1296,33 @@ spg_get_all_tetrahedra_relative_grid_address
   thm_get_all_relative_grid_address(relative_grid_address);
 }
 
-double
-spg_get_tetrahedra_integration_weight(const double omega,
-				      SPGCONST double tetrahedra_omegas[24][4],
+void
+spg_get_tetrahedra_integration_weight(double iw[120][4],
+                      const double omega,
+				      SPGCONST double tetrahedra_omegas[120][4],
+				      const int is_linear,
 				      const char function)
 {
-  return thm_get_integration_weight(omega,
+  return thm_get_integration_weight(iw,
+                    omega,
 				    tetrahedra_omegas,
+				    is_linear,
 				    function);
 }
 
 void
 spg_get_tetrahedra_integration_weight_at_omegas
-(double integration_weights[],
+(double integration_weights[][120][4],
  const int num_omegas,
  const double omegas[],
- SPGCONST double tetrahedra_omegas[24][4],
+ SPGCONST double tetrahedra_omegas[120][4],
+ const int is_linear,
  const char function)
 {
   thm_get_integration_weight_at_omegas(integration_weights,
 				       num_omegas,
 				       omegas,
 				       tetrahedra_omegas,
-				       function);
-}
-
-double
-spg_get_tetrahedra_integration_weight_1D(const double omega,
-				      SPGCONST double tetrahedra_omegas[2][2],
-				      const char function)
-{
-  return thm_get_integration_weight_1D(omega,
-				    tetrahedra_omegas,
-				    function);
-}
-
-void
-spg_get_tetrahedra_integration_weight_at_omegas_1D
-(double integration_weights[],
- const int num_omegas,
- const double omegas[],
- SPGCONST double tetrahedra_omegas[2][2],
- const char function)
-{
-  thm_get_integration_weight_at_omegas_1D(integration_weights,
-				       num_omegas,
-				       omegas,
-				       tetrahedra_omegas,
+				       is_linear,
 				       function);
 }

@@ -28,6 +28,8 @@ Carray* convert_to_carray(const PyArrayObject* npyary);
 void mat_add_matrix_d3_flatten(double m[9],double a[9], double b[9]);
 void mat_add_vector_d3_flatten(double m[3], double a[3], double b[3]);
 double mat_multiply_vector_vector_d3(double a[3],double b[3]);
+double mat_multiply_vector_vector_dn(double a[],double b[], int dim);
+void mat_copy_vector_dn(double a[],double b[],int dim);
 void mat_copy_vector_i3_flatten(int a[3], int b[3]);
 void mat_copy_matrix_id3_flatten(double a[9], int b[9]);
 void mat_copy_matrix_i3_flatten(int a[9], int b[9]);

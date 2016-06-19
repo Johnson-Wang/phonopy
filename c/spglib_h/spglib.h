@@ -454,26 +454,18 @@ spg_get_tetrahedra_relative_grid_address(int relative_grid_address[24][4][3],
 void
 spg_get_all_tetrahedra_relative_grid_address
 (int relative_grid_address[4][24][4][3]);
-double
-spg_get_tetrahedra_integration_weight(const double omega,
-				      SPGCONST double tetrahedra_omegas[24][4],
+void
+spg_get_tetrahedra_integration_weight(double iw[120][4],
+                      const double omega,
+				      SPGCONST double tetrahedra_omegas[120][4],
+				      const int is_linear,
 				      const char function);
 void
 spg_get_tetrahedra_integration_weight_at_omegas
-(double integration_weights[],
+(double integration_weights[][120][4],
  const int num_omegas,
  const double omegas[],
- SPGCONST double tetrahedra_omegas[24][4],
- const char function);
-double
-spg_get_tetrahedra_integration_weight_1D(const double omega,
-				      SPGCONST double tetrahedra_omegas[2][2],
-				      const char function);
-void
-spg_get_tetrahedra_integration_weight_at_omegas_1D
-(double integration_weights[],
- const int num_omegas,
- const double omegas[],
- SPGCONST double tetrahedra_omegas[2][2],
+ SPGCONST double tetrahedra_omegas[120][4],
+ const int is_linear,
  const char function);
 #endif

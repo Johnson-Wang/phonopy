@@ -179,6 +179,26 @@ double mat_multiply_vector_vector_d3(double a[3],
   return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 }
 
+
+double mat_multiply_vector_vector_dn(double a[],
+				   double b[],
+				   int dim)
+{ double sum=0.;
+  int i;
+  for (i=0; i < dim; i++)
+    sum += a[i] * b[i];
+  return sum;
+}
+
+void mat_copy_vector_dn(double a[],
+				   double b[],
+				   int dim)
+{
+  int i;
+  for (i=0; i < dim; i++)
+    a[i] = b[i];
+}
+
 /* m^-1 */
 /* ruby code for auto generating */
 /* 3.times {|i| 3.times {|j| */

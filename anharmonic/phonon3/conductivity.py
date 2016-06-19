@@ -8,7 +8,7 @@ from phonopy.phonon.thermal_properties import mode_cv as get_mode_cv
 from anharmonic.phonon3.triplets import get_grid_address, reduce_grid_points, get_ir_grid_points,\
     from_coarse_to_dense_grid_points, get_kpoint_group, get_group_summation, get_group_inversion
 from anharmonic.other.isotope import CollisionIso
-from phonopy.structure.tetrahedron_method import TetrahedronMethod, TriagonalMethod
+from phonopy.structure.tetrahedron_method import TetrahedronMethod
 unit_to_WmK = ((THz * Angstrom) ** 2 / (Angstrom ** 3) * EV / THz /
                (2 * np.pi)) # 2pi comes from definition of lifetime.
 ite_unit_to_WmK = kb_J / Angstrom ** 3 * ((THz * Angstrom) * THzToEv * EV / kb_J) ** 2  / THz/ (2 * np.pi)
@@ -33,7 +33,7 @@ class Conductivity:
                  mass_variances=None,
                  mesh_divisors=None,
                  coarse_mesh_shifts=None,
-                 boundary_mfp=None, # in micrometre
+                 boundary_mfp=None, # in micrometre;
                  no_kappa_stars=False,
                  gv_delta_q=None, # finite difference for group veolocity
                  log_level=0,

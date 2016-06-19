@@ -754,15 +754,12 @@ static PyObject * get_triplets_reciprocal_mesh_at_q(PyObject *self, PyObject *ar
     return NULL;
   }
 
-  int i, j, k;
-  const int num_grid = grid_points->dimensions[0];
   int (*grid_points_int)[3] = (int(*)[3])grid_points->data;
   int *weights_int = (int*)weights->data;
   int *third_q_int = (int*)third_q->data;
   int *map_q = (int*)map_q_py->data;
   int *rot_map_q = (int*)rot_map_q_py->data;
   const int* mesh_int = (int*)mesh->data;
-  const int* rot_int = (int*)rotations->data;
   const int num_rot = rotations->dimensions[0];
   SPGCONST int (*rot)[3][3] = (int(*)[3][3])rotations->data;
   const int num_ir = 
@@ -894,7 +891,7 @@ static PyObject * get_reduced_triplets_permute_sym(PyObject *self, PyObject *arg
   }
   int* triplet_mappings = (int*)triplet_mappings_py->data;
   const int num_grid = (int)grid_points_py->dimensions[0];
-  char* sequence = (char(*)[3])sequence_py->data;
+  char (*sequence)[3] = (char(*)[3])sequence_py->data;
   const int* triplet_numbers = (int*) triplet_numbers_py->data;
   const int* mesh = (int*)mesh_py->data;
   const int* first_mapping = (int*) first_mapping_py->data;
@@ -944,7 +941,7 @@ static PyObject * get_reduced_pairs_permute_sym(PyObject *self, PyObject *args)
   }
   int* pair_mappings = (int*)pairs_mappings->data;
   const int num_grid = (int)grid_points_py->dimensions[0];
-  char* sequence = (char(*)[2])sequence_py->data;
+  char (*sequence)[2] = (char(*)[2])sequence_py->data;
   const int* pair_numbers = (int*) pair_numbers_py->data;
   const int* mesh = (int*)mesh_py->data;
   const int* first_mapping = (int*) first_mapping_py->data;
@@ -1086,11 +1083,14 @@ get_tetrahedra_integration_weight(PyObject *self, PyObject *args)
 {
   double omega;
   PyArrayObject* tetrahedra_omegas_py;
+  PyArrayObject* iw_py;
+  int is_linear;
   char function;
-  double iw;
-  if (!PyArg_ParseTuple(args, "dOc",
+  if (!PyArg_ParseTuple(args, "OdOic",
+            &iw_py,
 			&omega,
 			&tetrahedra_omegas_py,
+			&is_linear,
 			&function)) {
     return NULL;
   }
@@ -1098,20 +1098,15 @@ get_tetrahedra_integration_weight(PyObject *self, PyObject *args)
   const int num_vertices = tetrahedra_omegas_py->dimensions[1];
   SPGCONST double (*tetrahedra_omegas)[num_vertices] =
     (double(*)[num_vertices])tetrahedra_omegas_py->data;
-  if (num_adjacent == 24 && num_vertices == 4){ // 3 dimensional
-      iw = spg_get_tetrahedra_integration_weight(omega,
-                                    tetrahedra_omegas,
-                                    function);
-  }
-  else if (num_adjacent == 6 && num_vertices == 3){ // 2 dimensional
-  }
-  else if (num_adjacent == 2 && num_vertices == 2){ // 1 dimensional
-      iw = spg_get_tetrahedra_integration_weight_1D(omega,
-                                    tetrahedra_omegas,
-                                    function);
-  }
+  double (*iw)[4] = (double(*)[4])iw_py->data;
+  spg_get_tetrahedra_integration_weight(iw,
+                                omega,
+                                tetrahedra_omegas,
+                                is_linear,
+                                function);
 
-  return PyFloat_FromDouble(iw);
+
+  Py_RETURN_NONE;
 }
 
 static PyObject *
@@ -1120,38 +1115,32 @@ get_tetrahedra_integration_weight_at_omegas(PyObject *self, PyObject *args)
   PyArrayObject* integration_weights_py;
   PyArrayObject* omegas_py;
   PyArrayObject* tetrahedra_omegas_py;
+  int is_linear;
   char function;
-  if (!PyArg_ParseTuple(args, "OOOc",
+  if (!PyArg_ParseTuple(args, "OOOic",
 			&integration_weights_py,
 			&omegas_py,
 			&tetrahedra_omegas_py,
+			&is_linear,
 			&function)) {
     return NULL;
   }
   const int num_adjacent = tetrahedra_omegas_py->dimensions[0];
   const int num_vertices = tetrahedra_omegas_py->dimensions[1];
   const double *omegas = (double*)omegas_py->data;
-  double *iw = (double*)integration_weights_py->data;
   const int num_omegas = (int)omegas_py->dimensions[0];
   SPGCONST double (*tetrahedra_omegas)[num_vertices] =
     (double(*)[num_vertices])tetrahedra_omegas_py->data;
 
-  if (num_adjacent == 24 && num_vertices == 4){ // 3 dimensional
-      spg_get_tetrahedra_integration_weight_at_omegas(iw,
-                              num_omegas,
-                              omegas,
-                              tetrahedra_omegas,
-                              function);
-  }
-  else if (num_adjacent == 6 && num_vertices == 3){ // 2 dimensional
-  }
-  else if (num_adjacent == 2 && num_vertices == 2){ // 1 dimensional
-      spg_get_tetrahedra_integration_weight_at_omegas_1D(iw,
-                              num_omegas,
-                              omegas,
-                              tetrahedra_omegas,
-                              function);
-  }
+  double (*iw)[num_adjacent][num_vertices] =
+    (double(*)[num_adjacent][num_vertices])integration_weights_py->data;
+  spg_get_tetrahedra_integration_weight_at_omegas(iw,
+                          num_omegas,
+                          omegas,
+                          tetrahedra_omegas,
+                          is_linear,
+                          function);
+
 
   Py_RETURN_NONE;
 }

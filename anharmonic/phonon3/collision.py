@@ -10,6 +10,7 @@ from anharmonic.phonon3.triplets import get_kgp_index_at_grid
 from triplets import get_triplets_integration_weights
 from anharmonic.other.isotope import CollisionIso # isotope scattering
 from phonopy.phonon.group_velocity import get_group_velocity, GroupVelocity
+from triplets import total_time
 class Collision():
     def __init__(self,
                  interaction,
@@ -26,6 +27,8 @@ class Collision():
                  read=False,
                  cutoff_frequency = 1e-4): #unit: THz
         self._pp = interaction
+        self._grid_address = interaction.get_grid_address()
+        self._bz_map = interaction.get_bz_map()
         self._sigmas = sigmas
         self._temperatures = temperatures
         self._mesh = self._pp.get_mesh_numbers()
@@ -75,6 +78,8 @@ class Collision():
         self._init_grids_properties()
         self._length = length
         self._gv_delta_q = gv_delta_q
+        # if is_tetrahedron_method:
+        #     self._set_irreducible_tetrahedra()
         if is_group_velocity:
             self._init_group_velocity()
         if mass_variances is not None:
@@ -87,6 +92,28 @@ class Collision():
             self._collision_iso.set_dynamical_matrix(dynamical_matrix=self._pp.get_dynamical_matrix())
         else:
             self._collision_iso = None
+
+    def _set_irreducible_tetrahedra(self):
+        from phonopy.structure.tetrahedron_method import TetrahedronMethod
+        import anharmonic._phono3py as phono3c
+        num_grid = len(self._grid_address)
+        grid_points = np.arange(num_grid, dtype="intc")
+        reciprocal_lattice = np.linalg.inv(self._pp.get_primitive().get_cell())
+        mesh = self._pp.get_mesh_numbers()
+        thm = TetrahedronMethod(reciprocal_lattice, mesh=mesh)
+        uniq_tetrahedra = np.zeros((np.prod(self._mesh+2) * 6, 20), dtype='intc')
+        tetrahedra_mapping = np.zeros((num_grid, 120), dtype="intc")
+        num_uniq = phono3c.uniq_neighboring_tetrahedra(
+                    uniq_tetrahedra,
+                    tetrahedra_mapping,
+                    grid_points,
+                    thm.get_tetrahedra(),
+                    mesh,
+                    self._grid_address,
+                    self._bz_map)
+        self._uniq_tetrahedra = uniq_tetrahedra[:num_uniq]
+        self._tetrahedra_mapping = tetrahedra_mapping
+
 
     def _init_group_velocity(self):
         self._group_velocity = GroupVelocity(
@@ -324,6 +351,7 @@ class Collision():
     def get_collision_out_all(self):
         return self._collision_out_all
 
+    @total_time.timeit
     def run_interaction_at_grid_point(self, g_skip = None):
         self.set_phonons_triplets()
         if self._read_col and ((not self._is_adaptive_sigma) or self._is_on_iteration):

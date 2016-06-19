@@ -612,7 +612,7 @@ def get_tetrahedra_relative_grid_address(microzone_lattice):
       microzone_lattice = np.linalg.inv(bulk.get_cell()) / mesh
     """
 
-    relative_grid_address = np.zeros((24, 4, 3), dtype='intc')
+    relative_grid_address = np.zeros((120, 20, 3), dtype='intc')
     spg.tetrahedra_relative_grid_address(
         relative_grid_address,
         np.array(microzone_lattice, dtype='double', order='C'))
@@ -627,17 +627,22 @@ def get_all_tetrahedra_relative_grid_address():
 
 def get_tetrahedra_integration_weight(omegas,
                                       tetrahedra_omegas,
-                                      function='I'):
+                                      function='I',
+                                      is_linear=True):
+
     if isinstance(omegas, float):
-        return spg.tetrahedra_integration_weight(
-            omegas,
-            np.array(tetrahedra_omegas, dtype='double', order='C'),
-            function)
+        integration_weights = np.zeros((120, 4), dtype='double')
+        return spg.tetrahedra_integration_weight(integration_weights,
+                                                 omegas,
+                                                 np.array(tetrahedra_omegas, dtype='double', order='C'),
+                                                 is_linear,
+                                                 function)
     else:
-        integration_weights = np.zeros(len(omegas), dtype='double')
+        integration_weights = np.zeros((len(omegas), 120, 4), dtype='double')
         spg.tetrahedra_integration_weight_at_omegas(
             integration_weights,
             np.array(omegas, dtype='double'),
             np.array(tetrahedra_omegas, dtype='double', order='C'),
+            is_linear,
             function)
         return integration_weights
