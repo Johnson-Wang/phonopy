@@ -31,7 +31,7 @@
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
-
+import time
 from math import pi, sqrt
 
 kb_J = 1.3806504e-23 # [J/K]
@@ -63,3 +63,37 @@ VaspToCm =  VaspToTHz * THzToCm # [cm^-1] 521.47083
 EvTokJmol = EV / 1000 * Avogadro # [kJ/mol] 96.4853910
 Wien2kToTHz = sqrt(Rydberg/1000*EV/AMU)/(Bohr*1e-10)/(2*pi)/1e12 # [THz] 3.44595837
 EVAngstromToGPa = EV * 1e21
+
+
+class Timeit():
+    def __init__(self):
+        self.time_dict = {}
+        self._is_print_each = False
+
+    def timeit(self, method):
+        name = method.__name__
+        if name not in self.time_dict.keys():
+            self.time_dict[name] = 0.
+
+        def timed(*args, **kw):
+            ts = time.time()
+            result = method(*args, **kw)
+            te = time.time()
+            if self._is_print_each:
+                print '%r %2.2f sec' % \
+                      (name, te-ts)
+            self.time_dict[name] += te - ts
+            return result
+        return timed
+
+    def output(self):
+        for key in self.time_dict.keys():
+            print '%r %2.2f sec' % \
+                  (key, self.time_dict[key])
+
+    def reset(self):
+        for key in self.time_dict.keys():
+            self.time_dict[key] = 0.
+
+
+total_time = Timeit()

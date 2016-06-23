@@ -1,7 +1,6 @@
 import numpy as np
 import phonopy.structure.spglib as spg
-from phonopy.units import THzToEv, Kb
-from phonopy.structure.symmetry import Symmetry
+from phonopy.units import THzToEv, Kb, total_time
 from phonopy.structure.tetrahedron_method import TetrahedronMethod, SegmentsMethod
 
 def gaussian(x, sigma):
@@ -169,6 +168,7 @@ def get_bz_grid_address(mesh, primitive_lattice, with_boundary=False, is_bz_map_
     else:
         return bz_grid_address[:np.prod(mesh)]
 
+@total_time.timeit
 def get_triplets_integration_weights(interaction,
                                      frequency_points,
                                      sigma_object,

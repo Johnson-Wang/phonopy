@@ -1,6 +1,6 @@
 import numpy as np
 import sys
-from phonopy.units import THz, kb_J, Angstrom, THzToEv, EV
+from phonopy.units import THz, kb_J, Angstrom, THzToEv, EV, total_time
 from anharmonic.phonon3.collision import Collision
 from anharmonic.phonon3.conductivity import Conductivity
 unit_to_WmK = kb_J / Angstrom ** 3 * ((THz * Angstrom) * THzToEv * EV / kb_J) ** 2  / THz/ (2 * np.pi) # 2pi comes from the definition of tau
@@ -102,8 +102,11 @@ class conductivity_ITE_CG(Conductivity):
                 self.set_collision()
                 if self._ite_step == 0:
                     self.calculate_residual0_at_sigma_and_temp() # initialize the residual and the searching path
+                total_time.reset()
                 self.run_at_sigma_and_temp()
+                total_time.output()
         self.check_convergence()
+
         self.renew()
         self._ite_step += 1
         return self
@@ -122,7 +125,9 @@ class conductivity_ITE_CG(Conductivity):
                              3), dtype='double')
         self._collision_out = np.zeros((num_sigma, num_grid, num_temp, num_band), dtype="double")
         self._gamma = np.zeros((num_sigma, num_grid, num_temp, num_band), dtype="double")
+        total_time.reset()
         self.run_smrt_sigma_adaption()
+        total_time.output()
         if self._is_read_col:
             self._pp.release_amplitude_all()
 
@@ -170,7 +175,7 @@ class conductivity_ITE_CG(Conductivity):
                             else:
                                 self._collision.set_asigma()
                         self._collision.set_integration_weights()
-                        self._collision.run_interaction_at_grid_point(self._collision._g_skip_reduced)
+                        self._collision.run_interaction_at_grid_point(self._collision.get_interaction_skip())
                         # self._collision.run_interaction_at_grid_point()
 
                         self._collision.run()
@@ -190,37 +195,6 @@ class conductivity_ITE_CG(Conductivity):
         if self._collision.get_write_collision():
             self._collision.set_write_collision(False)
             self._collision.set_read_collision(True)
-
-    # def run_smrt_no_sigma_adaption(self):
-    #     print "Calculation based on constant sigma values"
-    #     for s in range(len(self._sigmas)):
-    #         self.set_sigma(s)
-    #         for t in range(len(self._temperatures)):
-    #             self.set_temperature(t)
-    #             self.set_collision()
-    #             if self._log_level:
-    #                 print "######Kappa calculation within SMRT at sigma=%s, temp=%f #######" %(self._sigma, self._temp)
-    #             self.print_calculation_progress_header()
-    #             for g, grid_point in enumerate(self._grid_points):
-    #                 self._collision.set_grid(grid_point)
-    #                 self._collision.run_interaction_at_grid_point()
-    #                 self._collision.set_grid_points_occupation()
-    #                 self._collision.reduce_triplets()
-    #                 self._collision.run()
-    #                 # self._collision.calculate_collision(grid_point)
-    #                 # print self._collision_out.sum()
-    #                 self.assign_perturbation_at_grid_point(s, g, t)
-    #                 self.print_calculation_progress(g)
-    #             if not self._is_read_col:
-    #                 self._pp.write_amplitude_all()
-    #             self._collision.write_collision_all(log_level=self._log_level)
-    #         self.set_kappa_at_sigma(s)
-    #
-    #     print "Within SMRT, the thermal conductivities are recalculated to be (W/mK)"
-    #     self.print_kappa()
-    #     if self._is_write_col:
-    #         self._collision.set_write_collision(False)
-    #         self._collision.set_read_collision(True)
 
     def assign_perturbation_at_grid_point(self, isigma, igrid, itemp):
         grid_point = self._grid_points[igrid]

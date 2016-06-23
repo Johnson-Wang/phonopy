@@ -2,7 +2,7 @@ import numpy as np
 from phonopy.harmonic.dynamical_matrix import DynamicalMatrix, DynamicalMatrixNAC, get_smallest_vectors
 from phonopy.structure.symmetry import Symmetry
 from phonopy.structure.spglib import get_mappings
-from phonopy.units import VaspToTHz
+from phonopy.units import VaspToTHz, total_time
 from anharmonic.phonon3.real_to_reciprocal import RealToReciprocal
 from anharmonic.phonon3.reciprocal_to_normal import ReciprocalToNormal
 from anharmonic.phonon3.triplets import get_triplets_at_q_crude, get_BZ_triplets_at_q, get_nosym_triplets_at_q, \
@@ -319,12 +319,12 @@ class Interaction:
                 self._interaction_strength_reduced = np.zeros(
                     (len(self._triplets_at_q_reduced), len(self._band_indices), num_band, num_band),
                     dtype='double')
-                # if g_skip is None:
-                #     g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
+                if g_skip is None:
+                    g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
                 if lang == 'C':
-                    self._run_c()
+                    self._run_c(g_skip=g_skip)
                 else:
-                    self._run_py()
+                    self._run_py(g_skip=g_skip)
                 self._amplitude_all[undone_num] = self._interaction_strength_reduced[:]
                 import anharmonic._phono3py as phono3c
                 phono3c.interaction_from_reduced(self._interaction_strength,
@@ -333,7 +333,7 @@ class Interaction:
                                                  self._triplets_sequence[self._i].astype("byte"))
                 self._triplets_done[undone_num] = True
 
-
+    # @total_time.timeit
     def set_phonons(self, grid_points=None, lang = "C"):
         if lang == "C":
             self._set_phonon_c(grid_points)
@@ -371,6 +371,9 @@ class Interaction:
 
     def get_triplets_at_q(self):
         return self._triplets_at_q, self._weights_at_q
+
+    def get_triplets_done(self):
+        return self._triplets_done
 
     def get_triplets_sequence_at_q_disperse(self):
         return self._triplet_sequence_at_grid
@@ -438,6 +441,7 @@ class Interaction:
     def get_triplets_sequence_at_grid(self):
         return self._triplets_sequence[self._i]
 
+    @total_time.timeit
     def set_grid_point(self, grid_point, i=None, stores_triplets_map=False):
         if i==None:
             self._grid_point = grid_point
@@ -449,6 +453,7 @@ class Interaction:
             self._triplets_at_q = self._triplets[self._i]
             self._weights_at_q = self._weights[self._i]
             self._triplets_address = self._grid_address[self._triplets_at_q]
+
         else:
             reciprocal_lattice = np.linalg.inv(self._primitive.get_cell())
             if self._is_nosym:
@@ -806,9 +811,10 @@ class Interaction:
 
 
     def write_amplitude_all(self):
-        if self.get_is_write_amplitude() and self.get_amplitude_all() is not None:
-            write_amplitude_to_hdf5_all(self.get_amplitude_all(),
-                                        self._mesh,
-                                        is_nosym=self.is_nosym())
+        if self.get_is_write_amplitude():
+            if self.get_amplitude_all() is not None:
+                write_amplitude_to_hdf5_all(self.get_amplitude_all(),
+                                            self._mesh,
+                                            is_nosym=self.is_nosym())
             self.set_is_read_amplitude(True)
             self.set_is_write_amplitude(False)

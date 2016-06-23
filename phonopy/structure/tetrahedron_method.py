@@ -771,3 +771,13 @@ class TetrahedronMethod:
     def _I_4(self):
         return 0.0
 
+if __name__ == "__main__":
+    thm = TetrahedronMethod(np.array([[-1, 1, 1], [1, -1, 1], [1, 1, -1]], dtype=float), mesh=[1, 3, 8])
+    print "Main diagonal index: %d" %thm.get_main_diagonal_index()
+    print "Number of tetrahedra within the second neighbor: %d" % len(thm.get_tetrahedra())
+    print "Number of closely-adjacent tetrahedra: %d" %np.sum(thm.get_center_indices() < 4)
+    print "Indices of center vertices:"
+    print thm.get_center_indices()
+
+
+
