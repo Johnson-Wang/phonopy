@@ -5,7 +5,7 @@ from anharmonic.phonon3.imag_self_energy import gaussian
 from anharmonic.phonon3.imag_self_energy import occupation
 from anharmonic.file_IO import  read_collision_all_from_hdf5, write_collision_to_hdf5_all,\
     read_collision_at_grid_from_hdf5, write_collision_to_hdf5_at_grid
-from phonopy.units import THz, Hbar, EV, AMU, Angstrom
+from phonopy.units import THz, Hbar, EV, AMU, Angstrom, total_time
 from anharmonic.phonon3.triplets import get_kgp_index_at_grid
 from triplets import get_triplets_integration_weights
 from anharmonic.other.isotope import CollisionIso # isotope scattering
@@ -451,6 +451,9 @@ class Collision():
         # self._collision_in *= self._unit_conversion # unit in THz
         summation = np.sum(self._collision_in, axis=-1)
         self._collision_out = np.dot(self._triplet_weights, summation) / 2.0
+        a = np.where(self._pp._bz_to_pp_map[self._grid_point_triplets[:, 1]] == self._grid_point_triplets[0,0])[0][0]
+        self._collision_out += self._collision_in[a].diagonal()
+        np.fill_diagonal(self._collision_in[a], 0)
         if self._collision_iso is not None:
             self._collision_iso.run()
             self._collision_out += self._collision_iso._collision_out

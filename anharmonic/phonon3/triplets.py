@@ -1,41 +1,8 @@
 import numpy as np
+
 import phonopy.structure.spglib as spg
-from phonopy.units import THzToEv, Kb
-from phonopy.structure.symmetry import Symmetry
 from phonopy.structure.tetrahedron_method import TetrahedronMethod
-import time
-
-class Timeit():
-    def __init__(self):
-        self.time_dict = {}
-        self._is_print_each = False
-
-    def timeit(self, method):
-        name = method.__name__
-        if name not in self.time_dict.keys():
-            self.time_dict[name] = 0.
-
-        def timed(*args, **kw):
-            ts = time.time()
-            result = method(*args, **kw)
-            te = time.time()
-            if self._is_print_each:
-                print '%r %2.2f sec' % \
-                      (name, te-ts)
-            self.time_dict[name] += te - ts
-            return result
-        return timed
-
-    def output(self):
-        for key in self.time_dict.keys():
-            print '%r %2.2f sec' % \
-                  (key, self.time_dict[key])
-
-    def reset(self):
-        for key in self.time_dict.keys():
-            self.time_dict[key] = 0.
-
-total_time = Timeit()
+from phonopy.units import THzToEv, Kb, total_time
 
 
 def gaussian(x, sigma):

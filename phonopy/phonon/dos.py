@@ -132,7 +132,7 @@ class TotalDos(Dos):
             self._dos = dos[:,1]
         else:
             thm = self._tetrahedron_mesh
-            thm.run_at_frequencies(value='J',
+            thm.run_at_frequencies(value='I',
                                    frequency_points=self._omegas)
             iw = thm.get_integration_weights()
             self._dos = np.sum(np.dot(iw, self._weights), axis=1)

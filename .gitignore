@@ -47,3 +47,6 @@ csetup.py
 csetup3.py
 cmake2
 cmake3
+
+#testing code
+scripts/dostest.py

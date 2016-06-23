@@ -1509,6 +1509,9 @@ static PyObject * py_set_integration_weights(PyObject *self, PyObject *args)
 	                             'I');
         iw[i * num_band0 * num_band + j * num_band + bi] +=
          get_corrected_integration_weights(iw_tmp, center_indices, weight_correction, is_linear);
+         if (is_linear)
+         iw[i * num_band0 * num_band + j * num_band + bi] +=
+           thm_get_integration_weight_deriv(frequency_points[j], center_indices, freq_tetra, "I");
       }
     }
   }
@@ -1814,6 +1817,7 @@ py_set_triplets_integration_weights(PyObject *self, PyObject *args)
   int tp_relative_grid_address[2][120][20][3];
   int vertices[2][120][20];
   int adrs_shift, tbbb=num_triplets * num_band0 * num_band * num_band;
+  int tbbb2 = tbbb * 2;
   double f0, f1, f2, g0[120][4], g1[120][4], g2[120][4];
   double freq_vertices[3][120][20], freq_tetra[3][120][4];
   na = (is_linear)? 24: 120;
@@ -1868,7 +1872,12 @@ py_set_triplets_integration_weights(PyObject *self, PyObject *args)
             j * num_band * num_band + b1 * num_band + b2;
           iw[adrs_shift] += get_corrected_integration_weights(g0, tratra_center_indices, weight_correction, is_linear);
           iw[adrs_shift + tbbb] += get_corrected_integration_weights(g1, tratra_center_indices, weight_correction, is_linear);
-          iw[adrs_shift + 2 * tbbb] += get_corrected_integration_weights(g2, tratra_center_indices, weight_correction, is_linear);
+          iw[adrs_shift + tbbb2] += get_corrected_integration_weights(g2, tratra_center_indices, weight_correction, is_linear);
+//          if (is_linear){
+//            iw[adrs_shift] += thm_get_integration_weight_deriv(f0, tratra_center_indices, freq_tetra[0], "I");
+//            iw[adrs_shift + tbbb] += thm_get_integration_weight_deriv(f0, tratra_center_indices, freq_tetra[1], "I");
+//            iw[adrs_shift + tbbb2] += thm_get_integration_weight_deriv(f0, tratra_center_indices, freq_tetra[2], "I");
+//          }
         }
       }
     }

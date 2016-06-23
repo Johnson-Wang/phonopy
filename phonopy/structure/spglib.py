@@ -628,15 +628,26 @@ def get_all_tetrahedra_relative_grid_address():
 def get_tetrahedra_integration_weight(omegas,
                                       tetrahedra_omegas,
                                       function='I',
-                                      is_linear=True):
+                                      is_linear=True,
+                                      central_indices=None,
+                                      is_derivative=True):
 
     if isinstance(omegas, float):
         integration_weights = np.zeros((120, 4), dtype='double')
-        return spg.tetrahedra_integration_weight(integration_weights,
+        spg.tetrahedra_integration_weight(integration_weights,
                                                  omegas,
                                                  np.array(tetrahedra_omegas, dtype='double', order='C'),
                                                  is_linear,
                                                  function)
+        if is_derivative:
+            derivative_integration_weight = \
+            spg.tetrahedra_integration_weight_deriv(omegas,
+                                                    central_indices,
+                                                    np.array(tetrahedra_omegas, dtype='double', order='C'),
+                                                    function)
+            return integration_weights, derivative_integration_weight
+        return integration_weights, None
+
     else:
         integration_weights = np.zeros((len(omegas), 120, 4), dtype='double')
         spg.tetrahedra_integration_weight_at_omegas(
@@ -645,4 +656,14 @@ def get_tetrahedra_integration_weight(omegas,
             np.array(tetrahedra_omegas, dtype='double', order='C'),
             is_linear,
             function)
-        return integration_weights
+
+        if is_derivative:
+            derivative_integration_weight = np.zeros(len(omegas), dtype="double")
+            spg.tetrahedra_integration_weight_at_omegas_deriv(derivative_integration_weight,
+                                                    omegas,
+                                                    central_indices,
+                                                    np.array(tetrahedra_omegas, dtype='double', order='C'),
+                                                    function)
+            return integration_weights, derivative_integration_weight
+
+        return integration_weights, None

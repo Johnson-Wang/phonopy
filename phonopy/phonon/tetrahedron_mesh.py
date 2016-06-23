@@ -111,6 +111,7 @@ class TetrahedronMesh:
         num_freqs = len(self._frequency_points)
         self._integration_weights = np.zeros(
             (num_freqs, num_band, num_ir_grid_points), dtype='double')
+        diws  = np.zeros((num_freqs, num_band, num_ir_grid_points), dtype="double")
 
         reciprocal_lattice = np.linalg.inv(self._cell.get_cell())
         self._tm = TetrahedronMethod(reciprocal_lattice, mesh=self._mesh, is_linear=True)
@@ -123,8 +124,13 @@ class TetrahedronMesh:
             for ib, frequencies in enumerate(self._tetrahedra_frequencies):
                 self._tm.set_tetrahedra_omegas(frequencies)
                 self._tm.run(self._frequency_points, value=value)
-                iw = self._tm.get_integration_weight()
-                self._integration_weights[:, ib, i] = np.sum(iw * weight_correction, axis=(-1, -2))
+                iw_tmp = self._tm.get_integration_weight()
+                iw = np.sum(iw_tmp * weight_correction, axis=(-1, -2))
+                diw = self._tm._deriv_integration_weight
+                diws[:, ib, i] = diw
+                self._integration_weights[:, ib, i] = iw + diw
+                # self._integration_weights[:, ib, i] = np.sum(iw * weight_correction, axis=(-1, -2))
+        self._diws = diws / np.prod(self._mesh)
         self._integration_weights /= np.prod(self._mesh)
 
     def _prepare(self):

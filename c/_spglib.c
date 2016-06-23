@@ -32,6 +32,10 @@ static PyObject *
 get_tetrahedra_integration_weight(PyObject *self, PyObject *args);
 static PyObject *
 get_tetrahedra_integration_weight_at_omegas(PyObject *self, PyObject *args);
+static PyObject *
+get_tetrahedra_integration_weight_deriv(PyObject *self, PyObject *args);
+static PyObject *
+get_tetrahedra_integration_weight_at_omegas_deriv(PyObject *self, PyObject *args);
 
 static PyMethodDef functions[] = {
   {"dataset", get_dataset, METH_VARARGS,
@@ -85,6 +89,11 @@ static PyMethodDef functions[] = {
   {"tetrahedra_integration_weight_at_omegas",
    get_tetrahedra_integration_weight_at_omegas,
    METH_VARARGS, "Integration weight for tetrahedron method at omegas"},
+  {"tetrahedra_integration_weight_deriv", get_tetrahedra_integration_weight_deriv,
+   METH_VARARGS, "Integration weight derivative for tetrahedron method"},
+  {"tetrahedra_integration_weight_at_omegas_deriv",
+   get_tetrahedra_integration_weight_at_omegas_deriv,
+   METH_VARARGS, "Integration weight derivative for tetrahedron method at omegas"},
    {NULL, NULL, 0, NULL}
 };
 
@@ -1139,6 +1148,67 @@ get_tetrahedra_integration_weight_at_omegas(PyObject *self, PyObject *args)
                           omegas,
                           tetrahedra_omegas,
                           is_linear,
+                          function);
+
+
+  Py_RETURN_NONE;
+}
+
+
+
+
+static PyObject *
+get_tetrahedra_integration_weight_deriv(PyObject *self, PyObject *args)
+{
+  double omega;
+  PyArrayObject* tetrahedra_omegas_py;
+  PyArrayObject* central_indices_py;
+  char function;
+  double diw;
+  if (!PyArg_ParseTuple(args, "dOOc",
+			&omega,
+			&central_indices_py,
+			&tetrahedra_omegas_py,
+			&function)) {
+    return NULL;
+  }
+  const int *central_indices = (int *)central_indices_py->data;
+  SPGCONST double (*tetrahedra_omegas)[4] = (double (*)[4])tetrahedra_omegas_py->data;
+  diw = spg_get_tetrahedra_integration_weight_deriv(omega,
+                                central_indices,
+                                tetrahedra_omegas,
+                                function);
+
+  return PyFloat_FromDouble(diw);
+}
+
+static PyObject *
+get_tetrahedra_integration_weight_at_omegas_deriv(PyObject *self, PyObject *args)
+{
+  PyArrayObject* integration_weights_py;
+  PyArrayObject* omegas_py;
+  PyArrayObject* central_indices_py;
+  PyArrayObject* tetrahedra_omegas_py;
+  char function;
+  if (!PyArg_ParseTuple(args, "OOOOc",
+			&integration_weights_py,
+			&omegas_py,
+			&central_indices_py,
+			&tetrahedra_omegas_py,
+			&function)) {
+    return NULL;
+  }
+  const double *omegas = (double*)omegas_py->data;
+  const int num_omegas = (int)omegas_py->dimensions[0];
+  SPGCONST double (*tetrahedra_omegas)[4] =
+    (double(*)[4])tetrahedra_omegas_py->data;
+  const int *central_indices = (int *)central_indices_py->data;
+  double *iw = (double*)integration_weights_py->data;
+  spg_get_tetrahedra_integration_weight_at_omegas_deriv(iw,
+                          num_omegas,
+                          omegas,
+                          central_indices,
+                          tetrahedra_omegas,
                           function);
 
 

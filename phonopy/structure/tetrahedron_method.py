@@ -34,6 +34,8 @@
 
 import numpy as np
 import phonopy.structure.spglib as spg
+from phonopy.units import total_time
+
 # 8 corners
 parallelepiped_vertices = np.array([[0, 0, 0],
                                     [1, 0, 0],
@@ -74,6 +76,7 @@ class TetrahedronMethod:
 
     def run(self, omegas, value='I'):
         try:
+            # raise ImportError
             import phonopy._phonopy as phonoc
             self._run_c(omegas, value=value)
         except ImportError:
@@ -147,53 +150,92 @@ class TetrahedronMethod:
         return self._integration_weight
 
     def _run_c(self, omegas, value='I'):
-        integration_weight = spg.get_tetrahedra_integration_weight(
+        if self._is_linear:
+            is_derivative = True
+        else:
+            is_derivative = False
+        integration_weight, diw = spg.get_tetrahedra_integration_weight(
             omegas,
             self._tetrahedra_omegas,
             function=value,
-            is_linear=self._is_linear)
+            is_linear=self._is_linear,
+            central_indices=self._central_indices,
+            is_derivative=is_derivative)
         self._integration_weight = integration_weight
+        self._deriv_integration_weight = diw
+
 
 
     def _run_py(self, omegas, value='I'):
+        if self._is_linear:
+            is_derivative = True
+        else:
+            is_derivative = False
         if isinstance(omegas, float) or isinstance(omegas, int):
-            iw = self._get_integration_weight_py(omegas, value=value)
+            iw, diw = self._get_integration_weight_py(omegas, is_derivative=is_derivative, value=value)
         else:
             iw = np.zeros((len(omegas), 120, 4), dtype="double")
+            diw = []
             for i, omega in enumerate(omegas):
-                iw[i] = self._get_integration_weight_py(omega, value=value)
+                iw[i], diw_tmp = self._get_integration_weight_py(omega, is_derivative=is_derivative, value=value)
+                diw.append(diw_tmp)
         self._integration_weight = iw
+        if is_derivative:
+            self._deriv_integration_weight = np.array(diw, dtype="double")
 
-    def _get_integration_weight_py(self, omega, value='I'):
+    def _get_integration_weight_py(self, omega, is_derivative=False, value='I'):
         if value == 'I':
             IJ = self._I
             gn = self._g
+            dgn = self._dg
         else:
             IJ = self._J
             gn = self._n
+            dgn = self._g
 
         self._sort_indices = np.argsort(self._tetrahedra_omegas, axis=1)
         num_tetrahedra = self._tetrahedra_omegas.shape[0]
         sum_value =  np.zeros((num_tetrahedra, 4), dtype="double")
+        if is_derivative:
+            diw = np.zeros(num_tetrahedra, dtype='double')
         self._omega = omega
         for i, (omegas, indices) in enumerate(zip(self._tetrahedra_omegas,
                                        self._sort_indices)):
-            if self._is_linear and i > 24:
+            if self._is_linear and i > 23:
                 continue
             self._vertices_omegas = omegas[indices]
             v = self._vertices_omegas
-            for j in range(4):
-                if (omega < v[0]):
-                    sum_value[i,j] += IJ(0, np.where(indices==j)[0][0]) * gn(0)
-                elif (v[0] < omega and omega < v[1]):
-                    sum_value[i,j] += IJ(1, np.where(indices==j)[0][0]) * gn(1)
-                elif (v[1] < omega and omega < v[2]):
-                    sum_value[i,j] += IJ(2, np.where(indices==j)[0][0]) * gn(2)
-                elif (v[2] < omega and omega < v[3]):
-                    sum_value[i,j] += IJ(3, np.where(indices==j)[0][0]) * gn(3)
-                elif (v[3] < omega):
-                    sum_value[i,j] += IJ(4, np.where(indices==j)[0][0]) * gn(4)
-        return sum_value / 6 # a parallelogram consists of 6 tetrahedra
+            if is_derivative:
+                delta_omega = np.sum(omegas - omegas[self._central_indices[i]])
+            if (omega < v[0]):
+                if is_derivative:
+                    diw[i] = dgn(0) * delta_omega
+                for j in range(4):
+                    sum_value[i,indices[j]] += IJ(0, j) * gn(0)
+            elif (v[0] < omega and omega < v[1]):
+                if is_derivative:
+                    diw[i] = dgn(1) * delta_omega
+                for j in range(4):
+                    sum_value[i,indices[j]] += IJ(1, j) * gn(1)
+            elif (v[1] < omega and omega < v[2]):
+                if is_derivative:
+                    diw[i] = dgn(2) * delta_omega
+                for j in range(4):
+                    sum_value[i,indices[j]] += IJ(2, j) * gn(2)
+            elif (v[2] < omega and omega < v[3]):
+                if is_derivative:
+                    diw[i] = dgn(3) * delta_omega
+                for j in range(4):
+                    sum_value[i,indices[j]] += IJ(3, j) * gn(3)
+            elif (v[3] < omega):
+                if is_derivative:
+                    diw[i] = dgn(4) * delta_omega
+                for j in range(4):
+                    sum_value[i,indices[j]] += IJ(4, j) * gn(4)
+        if is_derivative:
+            return sum_value / 6, np.sum(diw[:24]) / 240
+        else:
+            return sum_value / 6, None # a parallelogram consists of 6 tetrahedra
 
     def _create_tetrahedra(self):
         #
@@ -243,6 +285,7 @@ class TetrahedronMethod:
     def get_main_diagonal_index(self):
         return self._main_diagonal_index
 
+    @total_time.timeit
     def _set_relative_grid_addresses(self):
         try:
             raise ImportError
@@ -414,6 +457,20 @@ class TetrahedronMethod:
             return self._g_4()
         else:
             assert False
+
+    def _dg(self, i):
+        if i == 0:
+            return self._dg_0()
+        elif i == 1:
+            return self._dg_1()
+        elif i == 2:
+            return self._dg_2()
+        elif i == 3:
+            return self._dg_3()
+        elif i == 4:
+            return self._dg_4()
+        else:
+            assert False
     
     def _n_0(self):
         """omega < omega1"""
@@ -460,6 +517,35 @@ class TetrahedronMethod:
                 (self._vertices_omegas[3] - self._vertices_omegas[0]))
 
     def _g_4(self):
+        """omega4 < omega"""
+        return 0.0
+
+    def _dg_0(self):
+        """omega < omega1"""
+        return 0.0
+
+    def _dg_1(self):
+        """omega1 < omega < omega2"""
+        # return 3 * self._n_1() / (self._omega - self._vertices_omegas[0])
+        return (6 * self._f(1, 0) /
+	  (self._vertices_omegas[2] - self._vertices_omegas[0]) /
+	  (self._vertices_omegas[3] - self._vertices_omegas[0]))
+
+    def _dg_2(self):
+        """omega2 < omega < omega3"""
+        return (6 /
+	  (self._vertices_omegas[2] - self._vertices_omegas[0]) /
+	  (self._vertices_omegas[3] - self._vertices_omegas[0]) *
+	  (1- (self._vertices_omegas[2] - self._vertices_omegas[0] + self._vertices_omegas[3] - self._vertices_omegas[1])
+	   / (self._vertices_omegas[3] - self._vertices_omegas[1]) * self._f(2, 1)))
+
+    def _dg_3(self):
+        """omega3 < omega < omega4"""
+        return (6 * self._f(1, 3) /
+            (self._vertices_omegas[3] - self._vertices_omegas[0]) /
+            (self._vertices_omegas[2] - self._vertices_omegas[3]))
+
+    def _dg_4(self):
         """omega4 < omega"""
         return 0.0
 

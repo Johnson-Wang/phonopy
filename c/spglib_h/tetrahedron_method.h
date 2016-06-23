@@ -20,4 +20,15 @@ thm_get_integration_weight_at_omegas(double integration_weights[][120][4],
 				     SPGCONST double tetrahedra_omegas[120][4],
 				     const int is_linear,
 				     const char function);
+double thm_get_integration_weight_deriv(const double omega,
+                  const int central_indices[],
+				  SPGCONST double tetrahedra_omegas[][4],
+				  const char function);
+void
+thm_get_integration_weight_at_omegas_deriv(double integration_weights[],
+				     const int num_omegas,
+				     const double omegas[],
+				     const int central_indices[],
+				     SPGCONST double tetrahedra_omegas[][4],
+				     const char function);
 #endif

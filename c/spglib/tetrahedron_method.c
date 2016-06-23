@@ -150,7 +150,15 @@ get_integration_weight_at_omegas(double integration_weights[][120][4],
 					      const int,
 					      const double,
 					      const double[4]));
-
+static void
+get_integration_weight_at_omegas_deriv(double diw[],
+				 const int num_omegas,
+				 const double omegas[],
+				 const int central_indices[],
+				 SPGCONST double tetrahedra_omegas[][4],
+				 double (*gn)(const int,
+					      const double,
+					      const double[4]));
 static void
 get_integration_weight(double iw_at_omega[120][4],
                const double omega,
@@ -161,6 +169,13 @@ get_integration_weight(double iw_at_omega[120][4],
 				    const double[4]),
 		       double (*IJ)(const int,
 				    const int,
+				    const double,
+				    const double[4]));
+static double
+get_integration_weight_deriv(const double omega,
+               const int central_indices[],
+		       SPGCONST double tetrahedra_omegas[][4],
+		       double (*dgn)(const int,
 				    const double,
 				    const double[4]));
 
@@ -184,6 +199,9 @@ static double _n(const int i,
 static double _g(const int i,
 		 const double omega,
 		 const double vertices_omegas[4]);
+static double _dg(const int i,
+		 const double omega,
+		 const double vertices_omegas[4]);
 static double _n_0(void);
 static double _n_1(const double omega,
 		   const double vertices_omegas[4]);
@@ -200,6 +218,14 @@ static double _g_2(const double omega,
 static double _g_3(const double omega,
 		   const double vertices_omegas[4]);
 static double _g_4(void);
+static double _dg_0(void);
+static double _dg_1(const double omega,
+		   const double vertices_omegas[4]);
+static double _dg_2(const double omega,
+		   const double vertices_omegas[4]);
+static double _dg_3(const double omega,
+		   const double vertices_omegas[4]);
+static double _dg_4(void);
 static double _J_0(void);
 static double _J_10(const double omega,
 		    const double vertices_omegas[4]);
@@ -307,6 +333,25 @@ void thm_get_integration_weight(double iw[120][4],
   }
 }
 
+double thm_get_integration_weight_deriv(const double omega,
+                  const int central_indices[],
+				  SPGCONST double tetrahedra_omegas[][4],
+				  const char function)
+{
+
+  if (function == 'I') {
+    return get_integration_weight_deriv(omega,
+                                        central_indices,
+                                        tetrahedra_omegas,
+                                        _dg);
+  } else {
+    return get_integration_weight_deriv(omega,
+                                        central_indices,
+                                        tetrahedra_omegas,
+                                        _g);
+  }
+}
+
 void
 thm_get_integration_weight_at_omegas(double integration_weights[][120][4],
 				     const int num_omegas,
@@ -329,6 +374,31 @@ thm_get_integration_weight_at_omegas(double integration_weights[][120][4],
 				     tetrahedra_omegas,
 				     is_linear,
 				     _n, _J);
+  }
+}
+
+void
+thm_get_integration_weight_at_omegas_deriv(double integration_weights[],
+				     const int num_omegas,
+				     const double omegas[],
+				     const int central_indices[],
+				     SPGCONST double tetrahedra_omegas[][4],
+				     const char function)
+{
+  if (function == 'I') {
+    get_integration_weight_at_omegas_deriv(integration_weights,
+				     num_omegas,
+				     omegas,
+				     central_indices,
+				     tetrahedra_omegas,
+				     _dg);
+  } else {
+    get_integration_weight_at_omegas_deriv(integration_weights,
+				     num_omegas,
+				     omegas,
+				     central_indices,
+				     tetrahedra_omegas,
+				     _g);
   }
 }
 
@@ -355,6 +425,29 @@ get_integration_weight_at_omegas(double integration_weights[][120][4],
 						    tetrahedra_omegas,
 						    is_linear,
 						    gn, IJ);
+
+  }
+}
+
+static void
+get_integration_weight_at_omegas_deriv(double diw[],
+				 const int num_omegas,
+				 const double omegas[],
+				 const int central_indices[],
+				 SPGCONST double tetrahedra_omegas[][4],
+				 double (*gn)(const int,
+					      const double,
+					      const double[4]))
+{
+  int i;
+
+#pragma omp parallel for
+  for (i = 0; i < num_omegas; i++) {
+     diw[i] = get_integration_weight_deriv(omegas[i],
+                            central_indices,
+						    tetrahedra_omegas,
+						    gn);
+
   }
 }
 
@@ -414,6 +507,52 @@ get_integration_weight(double iw_at_omega[120][4],
     for (j = 0; j < 4; j++)
       iw_at_omega[i][j] /= 6.;
 }
+
+
+static double
+get_integration_weight_deriv(const double omega,
+               const int central_indices[],
+		       SPGCONST double tetrahedra_omegas[][4],
+		       double (*dgn)(const int,
+				    const double,
+				    const double[4]))
+{
+  int i, j, ci[4];
+  double v[4], sum_omega, iw_at_omega=0.;
+  for (i = 0; i < 24; i++) {
+    sum_omega = 0.;
+    for (j = 0; j < 4; j++) {
+      v[j] = tetrahedra_omegas[i][j];
+      sum_omega += v[j] - tetrahedra_omegas[i][central_indices[i]];
+    }
+    sort_omegas(v, ci);
+
+    if (omega < v[0]) {
+      iw_at_omega +=  dgn(0, omega, v) * sum_omega;
+    }
+    else {
+      if (v[0] < omega && omega < v[1]) {
+        iw_at_omega += dgn(1, omega, v) * sum_omega;
+      }
+      else {
+        if (v[1] < omega && omega < v[2]) {
+          iw_at_omega += dgn(2, omega, v) * sum_omega;
+        } else {
+          if (v[2] < omega && omega < v[3]) {
+            iw_at_omega += dgn(3, omega, v) * sum_omega;
+          } else {
+            if (v[3] < omega) {
+              iw_at_omega += dgn(4, omega, v) * sum_omega;
+            }
+          }
+        }
+      }
+    }
+  }
+  iw_at_omega /= 240;
+  return iw_at_omega;
+}
+
 
 static void sort_omegas(double v[4], int index[4])
 {
@@ -657,6 +796,31 @@ static double _g(const int i,
   return 0;
 }
 
+static double _dg(const int i,
+		 const double omega,
+		 const double vertices_omegas[4])
+{
+  switch (i) {
+  case 0:
+    return _dg_0();
+  case 1:
+    return _dg_1(omega, vertices_omegas);
+  case 2:
+    return _dg_2(omega, vertices_omegas);
+  case 3:
+    return _dg_3(omega, vertices_omegas);
+  case 4:
+    return _dg_4();
+  }
+
+  warning_print("******* Warning *******\n");
+  warning_print(" g is something wrong. \n");
+  warning_print("******* Warning *******\n");
+  warning_print("(line %d, %s).\n", __LINE__, __FILE__);
+
+  return 0;
+}
+
 /* omega < omega1 */
 static double _n_0(void)
 {
@@ -742,6 +906,48 @@ static double _g_3(const double omega,
 
 /* omega4 < omega */
 static double _g_4(void)
+{
+  return 0.0;
+}
+
+/* omega < omega1 */
+static double _dg_0(void)
+{
+  return 0.0;
+}
+
+/* omega1 < omega < omega2 */
+static double _dg_1(const double omega,
+		   const double vertices_omegas[4])
+{
+  return (6 *
+	  _f(1, 0, omega, vertices_omegas) /
+	  (vertices_omegas[2] - vertices_omegas[0]) /
+	  (vertices_omegas[3] - vertices_omegas[0]));
+}
+
+/* omega2 < omega < omega3 */
+static double _dg_2(const double omega,
+		   const double vertices_omegas[4])
+{
+  return (6 /
+	  (vertices_omegas[2] - vertices_omegas[0]) /
+	  (vertices_omegas[3] - vertices_omegas[0]) *
+	  (1- (vertices_omegas[2] - vertices_omegas[0] + vertices_omegas[3] - vertices_omegas[1])
+	   / (vertices_omegas[3] - vertices_omegas[1]) * _f(2, 1, omega, vertices_omegas)));
+}
+
+/* omega3 < omega < omega4 */
+static double _dg_3(const double omega,
+		   const double vertices_omegas[4])
+{
+    return  (6 * _f(1, 3, omega, vertices_omegas) /
+            (vertices_omegas[3] - vertices_omegas[0]) /
+            (vertices_omegas[2] - vertices_omegas[3]));
+}
+
+/* omega4 < omega */
+static double _dg_4(void)
 {
   return 0.0;
 }

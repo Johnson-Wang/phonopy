@@ -1,6 +1,6 @@
 import numpy as np
 import sys
-from phonopy.units import THz, kb_J, Angstrom, THzToEv, EV
+from phonopy.units import THz, kb_J, Angstrom, THzToEv, EV, total_time
 from anharmonic.phonon3.collision import Collision
 from anharmonic.phonon3.conductivity import Conductivity
 from anharmonic.phonon3.triplets import total_time
@@ -83,7 +83,6 @@ class conductivity_ITE_CG(Conductivity):
     def __iter__(self):
         return self
 
-    @total_time.timeit
     def next(self):
         if (self._is_converge ==True).all():
             print "All calculations have converged"
@@ -179,8 +178,8 @@ class conductivity_ITE_CG(Conductivity):
                         self._collision.run_interaction_at_grid_point(self._collision.get_interaction_skip())
                         # self._collision.run_interaction_at_grid_point()
                         self._collision.run()
-                        print self._collision._gamma_all[0,0,0,3]
-                        sys.exit()
+                        # print self._collision._gamma_all[0,0,0,3]
+                        # sys.exit()
                         self.assign_perturbation_at_grid_point(s, g, t)
                         self.print_calculation_progress(g)
                     if asigma_step == 0 and (not self._is_read_col):
