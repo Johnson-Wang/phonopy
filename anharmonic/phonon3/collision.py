@@ -424,9 +424,15 @@ class Collision():
         # self._collision_in *= self._unit_conversion # unit in THz
         summation = np.sum(self._collision_in, axis=-1)
         self._collision_out = np.dot(self._triplet_weights, summation) / 2.0
-        a = np.where(self._pp._bz_to_pp_map[self._grid_point_triplets[:, 1]] == self._grid_point_triplets[0,0])[0][0]
-        self._collision_out += self._collision_in[a].diagonal()
-        np.fill_diagonal(self._collision_in[a], 0)
+
+        # Set the diagonal part in A_in as 0
+        # bz_to_pp = self._pp._bz_to_pp_map
+        # triplets = bz_to_pp[self.get_grid_point_triplets()]
+        # diag_pos = np.where(triplets[:, 1] == triplets[0,0])[0][0]
+        # self._collision_out += self._collision_in[diag_pos].diagonal()
+        # np.fill_diagonal(self._collision_in[diag_pos], 0)
+        # Set the diagonal part in A_in as 0
+
         if self._collision_iso is not None:
             self._collision_iso.run()
             self._collision_out += self._collision_iso._collision_out
