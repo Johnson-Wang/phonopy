@@ -274,6 +274,8 @@ class Interaction:
                 self._triplets_at_q_reduced = self._triplets_at_q[unitrip_indices].copy()
                 if g_skip is None:
                     g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
+
+
                 if lang == 'C':
                     self._run_c(g_skip=g_skip)
                 else:
@@ -707,6 +709,34 @@ class Interaction:
                             self._cutoff_frequency,
                             self._cutoff_hfrequency,
                             self._cutoff_delta)
+        # phono3c.interaction_degeneracy_grid(self._interaction_strength_reduced,
+        #                                     self._degenerates,
+        #                                     self._triplets_at_q_reduced)
+        #
+        # interaction0 = np.zeros_like(self._interaction_strength_reduced)
+        # phono3c.interaction(interaction0,
+        #                     self._frequencies,
+        #                     self._eigenvectors,
+        #                     self._triplets_at_q_reduced.copy(),
+        #                     self._grid_address,
+        #                     self._mesh,
+        #                     self._fc3,
+        #                     atc,
+        #                     atc_rec,
+        #                     g_skip,
+        #                     svecs,
+        #                     multiplicity,
+        #                     np.double(masses),
+        #                     p2s,
+        #                     s2p,
+        #                     self._band_indices,
+        #                     True,
+        #                     self._cutoff_frequency,
+        #                     self._cutoff_hfrequency,
+        #                     self._cutoff_delta)
+        # diff = np.abs(self._interaction_strength_reduced - interaction0)
+        # print np.unravel_index(diff.argmax(), diff.shape), diff.max()
+
 
     def _set_phonon_c(self, grid_points=None):
         import anharmonic._phono3py as phono3c
@@ -778,7 +808,7 @@ class Interaction:
 
         for i, grid_triplet in enumerate(self._triplets_at_q_reduced):
             print "%d / %d" % (i + 1, len(self._triplets_at_q_reduced))
-            r2r.run(self._grid_address[grid_triplet])
+            r2r.run(self._grid_address[grid_triplet], self._symmetrize_fc3_q)
             fc3_reciprocal = r2r.get_fc3_reciprocal()
             for gp in grid_triplet:
                 self._set_phonon_py(gp)

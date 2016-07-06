@@ -19,11 +19,35 @@ class ReciprocalToNormal:
         self._fc3_normal = None
         self._fc3_reciprocal = None
 
-    def run(self, fc3_reciprocal, grid_triplet, g_skip=None):
+    def run(self, fc3_reciprocal, grid_triplet, g_skip=None, is_sym_fc3q=True):
         num_band = self._primitive.get_number_of_atoms() * 3
         self._fc3_reciprocal = fc3_reciprocal
         self._fc3_normal = np.zeros((num_band,) * 3, dtype='double')
+        # fc3_normal_all = np.zeros((6, num_band, num_band, num_band), dtype='double')
+        # if is_sym_fc3q:
+        #     for e, index in enumerate([[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]):
+        #         self._fc3_normal = np.zeros((num_band,) * 3, dtype='double')
+        #         if e == 0:
+        #             self._reciprocal_to_normal(grid_triplet[index], g_skip=g_skip)
+        #             fc3_normal_all[e] = self._fc3_normal
+        #         elif e == 1:
+        #             self._reciprocal_to_normal(grid_triplet[index], g_skip=g_skip.swapaxes(1, 2))
+        #             fc3_normal_all[e] = self._fc3_normal.swapaxes(1, 2)
+        #         elif e == 2:
+        #             self._reciprocal_to_normal(grid_triplet[index], g_skip=g_skip.swapaxes(0, 1))
+        #             fc3_normal_all[e] = self._fc3_normal.swapaxes(0, 1)
+        #         elif e == 3:
+        #             self._reciprocal_to_normal(grid_triplet[index], g_skip=g_skip.swapaxes(1,2).swapaxes(0,2))
+        #             fc3_normal_all[e] = self._fc3_normal.swapaxes(0,2).swapaxes(1,2)
+        #         elif e == 4:
+        #             self._reciprocal_to_normal(grid_triplet[index], g_skip=g_skip.swapaxes(1,2).swapaxes(0, 1))
+        #             fc3_normal_all[e] = self._fc3_normal.swapaxes(0,1).swapaxes(1,2)
+        #         elif e == 5:
+        #             self._reciprocal_to_normal(grid_triplet[index], g_skip=g_skip.swapaxes(0,2))
+        #             fc3_normal_all[e] = self._fc3_normal.swapaxes(0,2)
+        #     print np.abs(fc3_normal_all - fc3_normal_all[0]).max()
         self._reciprocal_to_normal(grid_triplet, g_skip=g_skip)
+
 
     def get_reciprocal_to_normal(self):
         return self._fc3_normal
@@ -33,15 +57,12 @@ class ReciprocalToNormal:
         f1, f2, f3 = self._frequencies[grid_triplet]
         num_band = len(f1)
         cutoff = self._cutoff_frequency
-        sum_sequence = (np.ones((3,3))-2*np.eye(3))
         for (i, j, k) in list(np.ndindex((num_band,) * 3)):
-            if g_skip[i,j,k]:
+            if g_skip is not None and g_skip[i,j,k]:
                 continue
             if f1[i] > cutoff  and f1[i] < self._cutoff_hfrequency \
                 and f2[j] > cutoff and f3[k] > cutoff:
                 f=self._frequencies[grid_triplet]
-                # if (np.abs(np.sum( f* sum_sequence, axis=1)) > self._cutoff_delta).all():
-                #     continue
                 fc3_elem = self._sum_in_atoms((i, j, k), (e1, e2, e3))
                 fff = f1[i] * f2[j] * f3[k]
                 self._fc3_normal[i, j, k] = np.abs(fc3_elem) ** 2 / fff

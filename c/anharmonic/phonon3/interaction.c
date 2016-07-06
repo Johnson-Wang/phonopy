@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <lapacke.h>
+#include <math.h>
 #include "phonoc_array.h"
 #include "phonoc_utils.h"
 #include "phonon3_h/interaction.h"
@@ -58,6 +59,61 @@ static void real_to_normal_sym_q(double *fc3_normal_squared,
 static int collect_undone_grid_points(int *undone,
 				      char *phonon_done,
 				      const Iarray *triplets);
+
+void interaction_degeneracy_grid(double *interaction,
+				const int *degeneracy,
+				const int triplets_grid[][3],
+				const int num_triplets,
+				const int num_band)
+{
+  int i, j, k, l, m, ndeg, size;
+  const int nbb = num_band * num_band;
+  const int nbbb = num_band * num_band * num_band;
+  double interaction_temp[nbb], deg[num_band][3];
+//  double *interaction_temp = (double *) malloc(sizeof(double) * nbb);
+//  double (*deg)[3] = (double (*)[3]) malloc(sizeof(double) * num_band * 3);
+  //The frog jump algorithm for the degeneracy.
+//  #pragma omp parallel for private(i,k, l, m, ndeg, deg, scatt_temp)
+  for (i = 0; i < num_triplets; i++) // i: grid2 index
+  {
+   //k is the index for the position of the current frog
+    for (j = 0; j < 3; j++)
+      for (k=0; k < num_band; k++)
+        deg[k][j] = degeneracy[triplets_grid[i][j] * num_band + k];
+    for (j = 0; j < 3; j++) {
+      size = ((j==0)? nbb:((j==1)? num_band: 1));
+      k = 0;
+      while(k<num_band)
+      {
+         //Initialization for scatt_temp
+        for (m = 0; m < nbb; m++)
+          interaction_temp[m] = 0;
+        // find the length of bands to skip and sum all the values in another vector
+        for (l = k; l < num_band; l++)
+        {
+          if (deg[l][j] == k) // the lth band and the kth band are degenerate
+            for (m = 0; m < nbb; m++)
+              interaction_temp[m] += interaction[i * nbbb + l * size + m];
+          else
+            break;
+        }
+        ndeg = l - k; // number of degenerate states
+
+        //Take the average of the degenerate states
+        for (m = 0; m < nbb; m++)
+          interaction_temp[m] /= ndeg;
+
+        //assign the new value of scatt
+        for (l = k; l < k + ndeg; l++)
+          for (m = 0; m < nbb; m++)
+            interaction[i * nbbb + l * size + m] = interaction_temp[m];
+        k += ndeg;
+      }
+    }
+  }
+//  free(interaction_temp);
+//  free(deg);
+}
 
 void set_phonon_triplets(Darray *frequencies,
 			 Carray *eigenvectors,
@@ -289,33 +345,47 @@ static void real_to_normal_sym_q(double *fc3_normal_squared,
 {
   int i, j, k, l;
   int band_ex[3];
+  int bb = num_band*num_band;
+  int *ie;
   double q_ex[9];
   double *fc3_normal_squared_ex;
-
+  char *g_skip_new;
+//  double dmax=0, dtemp;
   fc3_normal_squared_ex =
     (double*)malloc(sizeof(double) * num_band * num_band * num_band);
-
+  g_skip_new = (char*) malloc(sizeof(char)*num_band*num_band*num_band);
   for (i = 0; i < num_band0 * num_band * num_band; i++) {
     fc3_normal_squared[i] = 0;
+    g_skip_new[i] = 0;
   }
 
   for (i = 0; i < 6; i++) {
+    ie = index_exchange[i];
     for (j = 0; j < 3; j ++) {
       for (k = 0; k < 3; k ++) {
-	q_ex[j * 3 + k] = q[index_exchange[i][j] * 3 + k];
+	q_ex[j * 3 + k] = q[ie[j] * 3 + k];
       }
     }
+    for (j = 0; j < num_band0; j++)
+      for (k = 0; k < num_band; k++)
+        for (l = 0; l < num_band; l++)
+        {
+          band_ex[0] = band_indices[j];
+          band_ex[1] = k;
+          band_ex[2] = l;
+          g_skip_new[j * bb + k * num_band + l] = g_skip[band_ex[ie[0]] * bb + band_ex[ie[1]] * num_band + band_ex[ie[2]]];
+        }
     real_to_normal(fc3_normal_squared_ex,
-		   freqs[index_exchange[i][0]],
-		   freqs[index_exchange[i][1]],
-		   freqs[index_exchange[i][2]],
-		   eigvecs[index_exchange[i][0]],
-		   eigvecs[index_exchange[i][1]],
-		   eigvecs[index_exchange[i][2]],
+		   freqs[ie[0]],
+		   freqs[ie[1]],
+		   freqs[ie[2]],
+		   eigvecs[ie[0]],
+		   eigvecs[ie[1]],
+		   eigvecs[ie[2]],
 		   fc3,
 		   atc,
            atc_rec,
-           g_skip,
+           g_skip_new,
 		   q_ex, /* q0, q1, q2 */
 		   shortest_vectors,
 		   multiplicity,
@@ -330,24 +400,30 @@ static void real_to_normal_sym_q(double *fc3_normal_squared,
            cutoff_delta);
     for (j = 0; j < num_band0; j++) {
       for (k = 0; k < num_band; k++) {
-	for (l = 0; l < num_band; l++) {
-	  band_ex[0] = band_indices[j];
-	  band_ex[1] = k;
-	  band_ex[2] = l;
-	  fc3_normal_squared[j * num_band * num_band +
-			     k * num_band +
-			     l] +=
-	    fc3_normal_squared_ex[band_ex[index_exchange[i][0]] *
-				  num_band * num_band +
-				  band_ex[index_exchange[i][1]] * num_band +
-				  band_ex[index_exchange[i][2]]] / 6;
-	}
+        for (l = 0; l < num_band; l++) {
+          band_ex[0] = band_indices[j];
+          band_ex[1] = k;
+          band_ex[2] = l;
+          fc3_normal_squared[j * num_band * num_band +
+                     k * num_band +
+                     l] +=
+            fc3_normal_squared_ex[band_ex[ie[0]] *
+                      num_band * num_band +
+                      band_ex[ie[1]] * num_band +
+                      band_ex[ie[2]]] / 6;
+//          dtemp = fabs(fc3_normal_squared[j * num_band * num_band +
+//                     k * num_band +
+//                     l] * 6 / (i + 1) - fc3_normal_squared_ex[band_ex[index_exchange[i][0]] *
+//                      num_band * num_band +
+//                      band_ex[index_exchange[i][1]] * num_band +
+//                      band_ex[index_exchange[i][2]]]);
+//          dmax = (dtemp > dmax)? dtemp: dmax;
+        }
       }
     }
   }
-
   free(fc3_normal_squared_ex);
-
+  free(g_skip_new);
 }
 
 static int collect_undone_grid_points(int *undone,

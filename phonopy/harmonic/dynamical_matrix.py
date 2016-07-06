@@ -114,6 +114,7 @@ class DynamicalMatrix:
             return dm.round(decimals=self._decimals)
 
     def set_dynamical_matrix(self, q, verbose=False):
+
         try:
             import phonopy._phonopy as phonoc
             self._set_c_dynamical_matrix(q)
@@ -133,7 +134,7 @@ class DynamicalMatrix:
             for j, s_j in enumerate(self._p2s_map):
                 mass = np.sqrt(self._mass[i] * self._mass[j])
                 dm_local = np.zeros((3, 3), dtype=complex)
-                # Sum in lattice points                
+                # Sum in lattice points
                 for k in range(self._scell.get_number_of_atoms()): 
                     if s_j == self._s2p_map[k]:
                         multi = multiplicity[k][i]
@@ -147,7 +148,7 @@ class DynamicalMatrix:
                 dm[(i*3):(i*3+3), (j*3):(j*3+3)] += dm_local
 
         # Impose Hermisian condition
-        self._dynamical_matrix = (dm + dm.conj().transpose()) / 2 
+        self._dynamical_matrix = (dm + dm.conj().transpose()) / 2
 
         if verbose:
             self._dynamical_matrix_log()

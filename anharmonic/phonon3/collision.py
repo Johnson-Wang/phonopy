@@ -491,7 +491,8 @@ class Collision():
                     self._pp,
                     np.array(f_points, dtype='double'),
                     sigma_object,
-                    triplets = self._grid_point_triplets)
+                    triplets = self._grid_point_triplets,
+                    is_triplet_symmetry=self._pp._symmetrize_fc3_q)
 
                 # when all the integration weights are smaller than the cutoff value
                 # the interaction strength will not be calculated

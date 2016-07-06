@@ -55,6 +55,7 @@ static PyObject *
 py_set_triplets_integration_weights_1D(PyObject *self, PyObject *args);
 static PyObject *
 py_set_triplets_integration_weights_sym(PyObject *self, PyObject *args);
+static PyObject *py_interaction_degeneracy_grid(PyObject *self, PyObject *args);
 static void get_triplet_tetrahedra_vertices
   (int vertices[2][24][4],
    SPGCONST int relative_grid_address[2][24][4][3],
@@ -98,6 +99,7 @@ static PyMethodDef functions[] = {
   {"collision_all_permute", py_collision_all_permute, METH_VARARGS, "Scattering rate calculation for all phonons in a triplet" },
   {"collision_from_reduced", py_collision_from_reduced, METH_VARARGS, "Scattering rate from reduced triplets" },
   {"collision_degeneracy", py_collision_degeneracy, METH_VARARGS, "Scattering rate symmetrization considering the degeneracy" },
+  {"interaction_degeneracy_grid", py_interaction_degeneracy_grid, METH_VARARGS, "Integration symmetrization considering the degeneracy" },
   {"collision_degeneracy_grid", py_collision_degeneracy_grid, METH_VARARGS, "Scattering rate symmetrization at a grid considering the degeneracy" },
   {"interaction_from_reduced", py_interaction_from_reduced, METH_VARARGS, "interaction strength from reduced triplets" },
   {"perturbation_next", py_perturbation_next, METH_VARARGS, "Calculate the next perturbation flow"},
@@ -1045,7 +1047,7 @@ static PyObject *py_collision_degeneracy_grid(PyObject *self, PyObject *args)
   PyArrayObject *py_scatt;
   PyArrayObject *py_degeneracies_all;
   PyArrayObject *py_grid_points2;
-  double grid_point;
+  int grid_point;
 
 
   if (!PyArg_ParseTuple(args, "OOOi",
@@ -1060,6 +1062,28 @@ static PyObject *py_collision_degeneracy_grid(PyObject *self, PyObject *args)
   const int *grid_points2 = (int *)py_grid_points2->data;
   double *scatt=(double*)py_scatt->data;
   collision_degeneracy_grid(scatt,degeneracies_all, grid_point, grid_points2, num_grid_points2, num_band);
+  Py_RETURN_NONE;
+}
+
+static PyObject *py_interaction_degeneracy_grid(PyObject *self, PyObject *args)
+{
+  PyArrayObject *py_interaction;
+  PyArrayObject *py_degeneracies_all;
+  PyArrayObject *py_triplets_at_grid;
+
+
+  if (!PyArg_ParseTuple(args, "OOO",
+			&py_interaction,
+			&py_degeneracies_all,
+			&py_triplets_at_grid))
+    return NULL;
+  const int num_triplets = (int)py_triplets_at_grid->dimensions[0];
+  const int num_band = (int) py_interaction->dimensions[2];
+
+  const int *degeneracies_all = (int*)py_degeneracies_all->data;
+  const int (*triplets_at_grid)[3] = (int (*)[3])py_triplets_at_grid->data;
+  double *interaction=(double*)py_interaction->data;
+  interaction_degeneracy_grid(interaction,degeneracies_all, triplets_at_grid, num_triplets, num_band);
   Py_RETURN_NONE;
 }
 

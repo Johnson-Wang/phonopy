@@ -23,6 +23,11 @@ void set_phonon_triplets(Darray *frequencies,
 			 const double *q_direction,
 			 const double nac_factor,
 			 const char uplo);
+void interaction_degeneracy_grid(double *interaction,
+				const int *degeneracy,
+				const int triplets_grid[][3],
+				const int num_triplets,
+				const int num_band);
 void get_interaction(Darray *fc3_normal_squared,
 		     const Darray *frequencies,
 		     const Carray *eigenvectors,

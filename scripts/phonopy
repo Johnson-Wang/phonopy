@@ -574,6 +574,8 @@ if not magmoms == None:
             print_end()
         sys.exit(1)
 
+settings.set_fc_symmetry_iteration(5)
+
 ###########################
 # Log of phonopy settings #
 ###########################
