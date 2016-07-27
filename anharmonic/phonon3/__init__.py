@@ -698,6 +698,18 @@ class Phono3py:
                              read_col = read_col,
                              write_col=write_col,
                              filename=filename)
+        for s, sigma in enumerate(sigmas):
+            write_kappa_to_hdf5(bis._gamma[s],
+                        bis._temperatures,
+                        bis._mesh,
+                        frequency=bis._frequencies,
+                        group_velocity=bis._gv,
+                        heat_capacity=bis.get_mode_heat_capacities(),
+                        kappa=bis._kappa[s],
+                        qpoint=bis._qpoints,
+                        weight=bis._grid_weights,
+                        sigma=sigma,
+                        filename="smrt")
         try:
             for bi in bis:
                 bi.set_kappa()
@@ -758,6 +770,20 @@ class Phono3py:
                             write_col=write_col,
                             is_thm=self._is_thm,
                             filename=filename)
+
+        for s, sigma in enumerate(sigmas):
+            write_kappa_to_hdf5(bis._gamma[s],
+                        bis._temperatures,
+                        bis._mesh,
+                        frequency=bis._frequencies,
+                        group_velocity=bis._gv,
+                        heat_capacity=bis.get_mode_heat_capacities(),
+                        kappa=bis._kappa[s],
+                        qpoint=bis._qpoints,
+                        weight=bis._grid_weights,
+                        sigma=sigma,
+                        filename="smrt")
+
         try:
             for bi in bis:
                 bi.set_kappa()

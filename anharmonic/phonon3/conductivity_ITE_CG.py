@@ -88,7 +88,7 @@ class conductivity_ITE_CG(Conductivity):
             raise StopIteration
         elif self._ite_step == self._ite_num: # maximum iteration step reached
             non_converge=np.where(self._is_converge==False)
-            sigma_nc=self._sigmas[non_converge[0]] # sigma value for the non-converged cases
+            sigma_nc=np.array(self._sigmas)[non_converge[0]] # sigma value for the non-converged cases
             temp_nc=self._temperatures[non_converge[1]]
             print "Calculations for"
             for s, t in zip(sigma_nc, temp_nc):
@@ -191,6 +191,7 @@ class conductivity_ITE_CG(Conductivity):
             if (self._rkappa < self._diff_kappa).all():
                 print "The sigma iteration process has converged."
                 break
+
         self._collision.set_is_on_iteration()
         if self._collision.get_write_collision():
             self._collision.set_write_collision(False)
