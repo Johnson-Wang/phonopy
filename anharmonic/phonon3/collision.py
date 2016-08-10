@@ -509,7 +509,7 @@ class Collision():
             if self._pp.get_triplets_done().all(): #when the interaction strengths are all done
                 self._g_skip = None
             else:
-                self._g_skip = np.array(self._g.sum(axis=0) < cutoff_g, dtype="bool")
+                self._g_skip = np.array(np.abs(self._g).sum(axis=0) < cutoff_g, dtype="bool")
 
     def get_integration_weights(self):
         return self._g

@@ -131,7 +131,6 @@ class conductivity_ITE_CG(Conductivity):
         if self._is_read_col:
             self._pp.release_amplitude_all()
 
-
     def run_smrt_sigma_adaption(self):
         asigma_step = 0
         while asigma_step <= self._max_asigma_step:
@@ -353,7 +352,6 @@ class conductivity_ITE_CG(Conductivity):
         self._F[self._isigma,:,self._itemp] = self._F_prev[self._isigma,:,self._itemp] + gz_over_ht * self._p_prev[self._isigma,:,self._itemp]
         self._r[self._isigma,:,self._itemp] = self._r_prev[self._isigma,:,self._itemp] - gz_over_ht * self._t_prev[self._isigma,:,self._itemp]
         self.calculate_gh_at_sigma_and_temp()
-
 
     def ite_init(self):
         self.smrt()

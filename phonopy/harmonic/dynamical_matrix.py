@@ -378,6 +378,14 @@ def get_equivalent_smallest_vectors(atom_number_supercell,
 
     p_pos = positions[atom_number_primitive]
     s_pos = positions[atom_number_supercell]
+
+    # relative_pos = np.array(list(np.ndindex((3,3,3)))) - 1
+    # differencessp = s_pos - p_pos + relative_pos
+    # distancessp = np.sqrt(np.sum(np.dot(differencessp, reduced_bases) ** 2, axis=-1))
+    # diffsp = differencessp[np.where(distancessp - np.min(distancessp) < symprec)]
+    # relative_scale = np.dot(reduced_bases,np.linalg.inv(primitive_lattice))
+    # smallest_vectors = np.dot(diffsp, relative_scale)
+
     for i in (-1, 0, 1):
         for j in (-1, 0, 1):
             for k in (-1, 0, 1):
@@ -399,6 +407,7 @@ def get_equivalent_smallest_vectors(atom_number_supercell,
             smallest_vectors.append(np.dot(differences[i], relative_scale))
             
     return smallest_vectors
+
 
 def get_smallest_vectors(supercell, primitive, symprec):
     """

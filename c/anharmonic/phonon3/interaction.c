@@ -69,9 +69,9 @@ void interaction_degeneracy_grid(double *interaction,
   int i, j, k, l, m, ndeg, size;
   const int nbb = num_band * num_band;
   const int nbbb = num_band * num_band * num_band;
-  double interaction_temp[nbb], deg[num_band][3];
-//  double *interaction_temp = (double *) malloc(sizeof(double) * nbb);
-//  double (*deg)[3] = (double (*)[3]) malloc(sizeof(double) * num_band * 3);
+//  double interaction_temp[nbb], deg[num_band][3];
+  double *interaction_temp = (double *) malloc(sizeof(double) * nbb);
+  double (*deg)[3] = (double (*)[3]) malloc(sizeof(double) * num_band * 3);
   //The frog jump algorithm for the degeneracy.
 //  #pragma omp parallel for private(i,k, l, m, ndeg, deg, scatt_temp)
   for (i = 0; i < num_triplets; i++) // i: grid2 index
@@ -111,8 +111,8 @@ void interaction_degeneracy_grid(double *interaction,
       }
     }
   }
-//  free(interaction_temp);
-//  free(deg);
+  free(interaction_temp);
+  free(deg);
 }
 
 void set_phonon_triplets(Darray *frequencies,
