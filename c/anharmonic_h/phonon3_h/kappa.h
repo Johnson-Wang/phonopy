@@ -44,7 +44,8 @@ void get_interaction_from_reduced(double *interaction,
 				  const double *interaction_all,
 				  const int *triplet_mapping,
 				  const char *triplet_sequence,
-				  const int num_triplet, 
+				  const int num_triplet,
+				  const int num_band0,
 				  const int num_band);
 
 void get_collision_from_reduced(double *scatt, 

@@ -23,7 +23,7 @@ class conductivity_RTA(Conductivity):
                  grid_points=None,
                  cutoff_lifetime=1e-4,  # in second
                  diff_kappa = 1e-3,  #  W/m-K
-                 is_nu=False,  # is Normal or Umklapp
+                 nu=None,  # is Normal or Umklapp
                  no_kappa_stars=False,
                  gv_delta_q=1e-4,  # finite difference for group velocity
                  log_level=0,
@@ -43,11 +43,11 @@ class conductivity_RTA(Conductivity):
                               gv_delta_q=gv_delta_q,
                               log_level=log_level,
                               write_tecplot=write_tecplot)
-        self._ise = ImagSelfEnergy(self._pp, is_nu, is_thm=is_thm, cutoff_lifetime= cutoff_lifetime)
+        self._ise = ImagSelfEnergy(self._pp, nu, is_thm=is_thm, cutoff_lifetime= cutoff_lifetime)
         self._max_sigma_step=asigma_step
         self._is_asigma = False if asigma_step==1 else True
         self._sigma_iteration_step = 0
-        self._is_nu=is_nu
+        self._nu=nu
         self._filename = filename
         if asigma_step > 1:
             if self._filename is not None:
@@ -235,7 +235,7 @@ class conductivity_RTA(Conductivity):
                                     len(self._temperatures),
                                     num_freqs), dtype='double')
 
-            if self._is_nu:
+            if self._nu:
                 self._gamma_N = np.zeros_like(self._gamma)
                 self._gamma_U = np.zeros_like(self._gamma)
         # self._gamma_prev = self._gamma.copy()
@@ -272,7 +272,7 @@ class conductivity_RTA(Conductivity):
                 self._ise.set_temperature(t)
                 self._ise.run()
                 self._gamma[j, i, k] = self._ise.get_imag_self_energy()
-                if self._is_nu:
+                if self._nu:
                     self._gamma_N[j,i,k]=self._ise.get_imag_self_energy_N()
                     self._gamma_U[j,i,k]=self._ise.get_imag_self_energy_U()
 

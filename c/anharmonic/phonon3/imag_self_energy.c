@@ -65,7 +65,7 @@ void get_imag_self_energy(double *imag_self_energy,
 			  const double *asigma,
 			  const double temperature,
 			  const double unit_conversion_factor,
-                          const double cutoff_delta,
+              const double cutoff_delta,
 			  const double cutoff_frequency,
 			  const double cutoff_gamma)
 {
@@ -84,7 +84,7 @@ void get_imag_self_energy(double *imag_self_energy,
 				   asigma,
 				   temperature,
 				   unit_conversion_factor,
-                                   cutoff_delta,
+                   cutoff_delta,
 				   cutoff_frequency,
 				   cutoff_gamma);
   }
@@ -234,7 +234,7 @@ static double sum_imag_self_energy_at_band(const int num_band,
 					   const double *freqs2,
 					   const double *sigmas,
 					   const double temperature,
-                                           const double cutoff_delta,
+                       const double cutoff_delta,
 					   const double cutoff_frequency,
 					   const double cut_gamma)
 {
@@ -279,7 +279,7 @@ static double sum_imag_self_energy_at_band_0K(const int num_band,
 					      const double *freqs0,
 					      const double *freqs1,
 					      const double *sigmas,
-                                              const double cutoff_delta,
+                          const double cutoff_delta,
 					      const double cutoff_frequency,
 					      const double cut_gamma)
 {
@@ -357,6 +357,7 @@ void get_thm_imag_self_energy_at_bands(double *imag_self_energy,
 				       const int *triplets,
 				       const int *weights,
 				       const double *g,
+				       const int *band_indices,
 				       const double temperature,
 				       const double unit_conversion_factor,
 				       const double cutoff_frequency)
@@ -371,7 +372,7 @@ void get_thm_imag_self_energy_at_bands(double *imag_self_energy,
 
   ise = (double*)malloc(sizeof(double) * num_triplets * num_band0);
   
-#pragma omp parallel for private(j, gp1, gp2, n1, n2, f1, f2)
+#pragma omp parallel for private(j, gp1, gp2, n0, f0,  n1, n2, f1, f2)
   for (i = 0; i < num_triplets; i++) {
     gp1 = triplets[i * 3 + 1];
     gp2 = triplets[i * 3 + 2];
@@ -380,38 +381,43 @@ void get_thm_imag_self_energy_at_bands(double *imag_self_energy,
     for (j = 0; j < num_band; j++) {
       f1 = frequencies[gp1 * num_band + j];
       f2 = frequencies[gp2 * num_band + j];
-      if (f1 > cutoff_frequency) {
-	n1[j] = bose_einstein(f1, temperature);
-      } else {
-	n1[j] = -1;
-      }
-      if (f2 > cutoff_frequency) {
-	n2[j] = bose_einstein(f2, temperature);
-      } else {
-	n2[j] = -1;
-      }
+      if (f1 > cutoff_frequency)
+	    n1[j] = bose_einstein(f1, temperature);
+      else
+	    n1[j] = -1;
+
+      if (f2 > cutoff_frequency)
+	    n2[j] = bose_einstein(f2, temperature);
+      else
+	    n2[j] = -1;
     }
     
     for (j = 0; j < num_band0; j++) {
-      f0 = frequencies[triplets[i * 3] * num_band + j];
+      f0 = frequencies[triplets[i * 3] * num_band + band_indices[j]];
       if (temperature > 0) {
-	n0 = bose_einstein(f0, temperature);
-	if (n0 < 0) continue;
-	ise[i * num_band0 + j] =
-	  sum_thm_imag_self_energy_at_band
-	  (num_band,
-	   fc3_normal_sqared->data +
-	   i * num_band0 * num_band * num_band + j * num_band * num_band,
-           n0,
-	   n1,
-	   n2,
-	   g + i * num_band0 * num_band * num_band + j * num_band * num_band, //g0
-           g + (i + num_triplets) * num_band0 * num_band * num_band + 
-	   j * num_band * num_band,  //g1
-	   g + (i + 2 * num_triplets) * num_band0 * num_band * num_band +
-	   j * num_band * num_band); //g2
+        if (f0 > cutoff_frequency)
+          n0 = bose_einstein(f0, temperature);
+	    else
+	      n0 = -1;
+	    if (n0 < 0) {
+	      ise[i * num_band0 + j] = 0.;
+	      continue;
+	    }
+        ise[i * num_band0 + j] =
+            sum_thm_imag_self_energy_at_band
+          (num_band,
+          	fc3_normal_sqared->data +
+          	 i * num_band0 * num_band * num_band + j * num_band * num_band,
+          n0,
+          n1,
+          n2,
+          g + i * num_band0 * num_band * num_band + j * num_band * num_band, //g0
+          g + (i + num_triplets) * num_band0 * num_band * num_band +
+	      j * num_band * num_band,  //g1
+	      g + (i + 2 * num_triplets) * num_band0 * num_band * num_band +
+	      j * num_band * num_band); //g2
       } else {
-	ise[i * num_band0 + j] =
+      	ise[i * num_band0 + j] =
 	  sum_thm_imag_self_energy_at_band_0K
 	  (num_band,
 	   fc3_normal_sqared->data +
@@ -424,10 +430,10 @@ void get_thm_imag_self_energy_at_bands(double *imag_self_energy,
     free(n1);
     free(n2);
   }
-
   for (i = 0; i < num_band0; i++) {
     imag_self_energy[i] = 0;
     for (j = 0; j < num_triplets; j++) {
+
       imag_self_energy[i] += ise[j * num_band0 + i] * weights[j];
     }
     imag_self_energy[i] *= unit_conversion_factor;

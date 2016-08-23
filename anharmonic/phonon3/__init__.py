@@ -247,10 +247,12 @@ class Phono3py:
                       sigmas=[0.1],
                       temperatures=None,
                       read_amplitude=False,
-                      is_nu=False,
+                      nu=None,
+                      scattering_class=None,
                       band_paths=None,
                       filename=None):
-        ise = ImagSelfEnergy(self._interaction, is_nu=is_nu)
+        self._interaction.set_is_disperse(True)
+        ise = ImagSelfEnergy(self._interaction, nu=nu)
         if temperatures is None:
             temperatures = np.arange(0, 1000.0 + 10.0 / 2.0, 10.0)
         self._temperatures=temperatures
@@ -260,14 +262,16 @@ class Phono3py:
                                               sigmas,
                                               temperatures,
                                               grid_points,
-                                              is_nu,
+                                              nu,
+                                              scattering_class,
                                               filename)
         elif band_paths is not None:
             self.get_linewidth_at_paths(ise,
                                         sigmas,
                                         temperatures,
                                         band_paths,
-                                        is_nu,
+                                        nu,
+                                        scattering_class,
                                         filename)
 
     def get_linewidth_at_paths(self,
@@ -276,7 +280,8 @@ class Phono3py:
                                temperatures,
                                band_paths,
                                is_nu,
-                               filename):
+                               scattering_class=None,
+                               filename=None):
 
         if self._is_nosym:
             grid_address, grid_mapping =get_grid_address([x + (x % 2 == 0) for x in self._mesh], is_return_map=True)
@@ -286,10 +291,6 @@ class Phono3py:
                                                                             is_return_map=True)
         qpoints_address=grid_address / np.array(self._mesh, dtype=float)
         print "Paths in reciprocal reduced coordinates:"
-        if is_nu:
-            path_fun=self.path_nu
-        else:
-            path_fun=self.path
         for sigma in sigmas:
             self._sigma = sigma
             lws_paths=[]
@@ -301,11 +302,12 @@ class Phono3py:
                 (new_path,
                  dists,
                 freqs,
-                lws)=path_fun(path,
+                lws)=self.path(path,
                               qpoints_address,
                               grid_mapping,
                               ise,
-                              temperatures)
+                              temperatures,
+                              scattering_class)
                 new_paths.append(new_path)
                 distances.append(dists)
                 frequencies.append(freqs)
@@ -313,14 +315,17 @@ class Phono3py:
             self._distances=distances
             self._freqs_on_path=frequencies
             self._lws_on_path=lws_paths
-            write_linewidth_band_csv(new_paths,
+
+            write_linewidth_band_csv(self._mesh,
+                                     new_paths,
                                      distances=self._distances,
                                      lws=self._lws_on_path,
                                      band_indices=self._band_indices,
                                      temperatures=temperatures,
                                      frequencies=self._freqs_on_path,
-                                     is_nu=is_nu,
-                                     filename="lw_band-sigma%.2f.csv"%sigma)
+                                     scattering_class=scattering_class,
+                                     nu=is_nu,
+                                     filename=(("-s%s"%sigma) if sigma is not None else ""))
             self.plot_lw()
 
     def plot_lw(self, symbols=None):
@@ -345,113 +350,45 @@ class Phono3py:
                 plt.axhline(y=0, linestyle=':', linewidth=0.5, color='b')
                 if len(lws.shape)== 4:
                     plt.legend(["Total","Normal process", "Umklapp process"])
-                plt.savefig("linewidth-t%d-b%s.pdf"%(self._temperatures[t],
-                                                   "".join(map(str,np.array(self._band_indices[b])+1))))
+                plt.savefig("linewidth-t%d-b%d.pdf"%(self._temperatures[t],self._band_indices[b]+1))
                 plt.show()
-
-
-    def path_nu(self,
-                path,
-                qpoints_address,
-                grids_mapping,
-                ise,
-                temperatures):
-        lw_on_path=np.zeros((len(path),len(temperatures), len(self._band_indices)), dtype="double")
-        lw_N_on_path=np.zeros_like(lw_on_path)
-        lw_U_on_path=np.zeros_like(lw_on_path)
-        freqs_on_path=np.zeros((len(path), len(self._band_indices)), dtype="double")
-        new_path = []
-        for p, qpoint in enumerate(path):
-            # dist_vector=np.abs(qpoints_address-qpoint)
-            # distance= np.array([np.linalg.norm(x) for x in  dist_vector])
-            # grid=np.argmin(distance)
-            # print "grid1: ", grid
-            # calculating the grid position from qpoint
-            mesh=np.array(self._mesh)
-            grid_point= np.rint(qpoint *mesh).astype(int)
-            mesh2=mesh+(mesh%2==0)
-            grid_address = np.where(grid_point>=0, grid_point,mesh2+grid_point)
-            grid=np.dot(grid_address, np.r_[1,np.cumprod(mesh2[:-1])])
-            ise.set_grid_point(grids_mapping[grid])
-            if self._log_level:
-                weights = self._interaction.get_triplets_at_q()[1]
-                print "------ Linewidth ------(%d/%d)"%(p, len(path))
-                print "calculated at qpoint", qpoint
-                print "but represented by qpoint", qpoints_address[grid],  "due to the finite mesh points"
-                print "grid:", grid
-                print "Number of ir-triplets:",
-                print "%d / %d" % (len(weights), weights.sum())
-            new_path.append(qpoints_address[grid])
-            ise.run_interaction(self._read_amplitude)
-            ise.set_sigma(self._sigma)
-            freqs_on_path[p]=self._interaction._frequencies[grids_mapping[grid],self._band_indices]
-            gamma = np.zeros((len(temperatures),
-                              len(self._band_indices)),
-                             dtype='double')
-            gamma_N=np.zeros_like(gamma)
-            gamma_U=np.zeros_like(gamma)
-            for i, t in enumerate(temperatures):
-                ise.set_temperature(t)
-                ise.run_at_sigma_and_temp()
-                gamma[i] = ise.get_imag_self_energy()
-                gamma_N[i]=ise.get_imag_self_energy_N()
-                gamma_U[i]=ise.get_imag_self_energy_U()
-
-            for i, bi in enumerate(self._band_indices):
-                pos = 0
-                for j in range(i):
-                    pos += len(self._band_indices[j])
-                lw_on_path[p,:,i]=gamma[:, pos:(pos+len(bi))].sum(axis=1) * 2 / len(bi)
-                lw_N_on_path[p,:,i]=gamma_N[:, pos:(pos+len(bi))].sum(axis=1) * 2 / len(bi)
-                lw_U_on_path[p,:,i]=gamma_U[:, pos:(pos+len(bi))].sum(axis=1) * 2 / len(bi)
-        lws=np.concatenate((lw_on_path[..., np.newaxis],
-                            lw_N_on_path[..., np.newaxis],
-                            lw_U_on_path[..., np.newaxis]),
-                           axis=-1)
-        new_path = np.array(new_path)
-        distances=map(lambda x: np.linalg.norm(np.dot(x-new_path[0],
-                                                      np.linalg.inv(self._primitive.get_cell().T))),new_path)
-        return (new_path, distances, freqs_on_path, lws)
-
 
     def path(self,
              path,
              qpoints_address,
              grids_mapping,
              ise,
-             temperatures):
+             temperatures,
+             scattering_class=None):
         lw_on_path=np.zeros((len(path),len(temperatures), len(self._band_indices)), dtype="double")
         freqs_on_path=np.zeros((len(path), len(self._band_indices)), dtype="double")
         new_path = []
         for p, qpoint in enumerate(path):
-            dist_vector=np.abs(qpoints_address-qpoint)
-            distance= np.array([np.linalg.norm(x) for x in  dist_vector])
+            # dist_vector=np.abs(qpoints_address-qpoint)
+            distance= np.sqrt(np.sum((qpoints_address-qpoint) ** 2, axis=-1))
             grid=np.argmin(distance)
             ise.set_grid_point(grids_mapping[grid])
             if self._log_level:
                 weights = self._interaction.get_triplets_at_q()[1]
                 print "------ Linewidth ------(%d/%d)"%(p, len(path))
                 print "calculated at qpoint", qpoint
-                print "but represented by qpoint", qpoints_address[grid],  "due to the finite mesh"
+                print "and represented by grid: %d (%.7f %.7f %.7f) due to the finite mesh" % (grid, qpoints_address[grid][0], qpoints_address[grid][1], qpoints_address[grid][2])
                 print "Number of ir-triplets:",
                 print "%d / %d" % (len(weights), weights.sum())
             new_path.append(qpoints_address[grid])
-            ise.run_interaction(self._read_amplitude)
             ise.set_sigma(self._sigma)
+            ise.run_interaction(scattering_class, self._read_amplitude)
             freqs_on_path[p]=self._interaction._frequencies[grids_mapping[grid]][self._band_indices]
             gamma = np.zeros((len(temperatures),
                               len(self._band_indices)),
                              dtype='double')
             for i, t in enumerate(temperatures):
                 ise.set_temperature(t)
-                ise.run_at_sigma_and_temp()
+                ise.run(scattering_class, is_triplet_symmetry=self._interaction.get_is_symmetrize_fc3_q())
                 gamma[i] = ise.get_imag_self_energy()
 
             for i, bi in enumerate(self._band_indices):
-                pos = 0
-                for j in range(i):
-                    pos += len(self._band_indices[j])
-                lw_on_path[p,:,i]=gamma[:, pos:(pos+len(bi))].sum(axis=1) * 2 / len(bi)
+                lw_on_path[p,:,i]=gamma[:, i] * 2
         new_path = np.array(new_path)
         distances=map(lambda x: np.linalg.norm(np.dot(x-new_path[0],
                                                       np.linalg.inv(self._primitive.get_cell().T))),new_path)
@@ -465,6 +402,7 @@ class Phono3py:
                                      temperatures,
                                      grid_points,
                                      is_nu,
+                                     scattering_class,
                                      filename):
         for gp in grid_points:
             ise.set_grid_point(gp)
@@ -473,9 +411,9 @@ class Phono3py:
                 print "------ Linewidth ------"
                 print "Number of ir-triplets:",
                 print "%d / %d" % (len(weights), weights.sum())
-            ise.run_interaction(self._read_amplitude)
             for sigma in sigmas:
                 ise.set_sigma(sigma)
+                ise.run_interaction(scattering_class, self._read_amplitude)
                 gamma = np.zeros((len(temperatures),
                                   len(self._band_indices)),
                                  dtype='double')
@@ -484,22 +422,22 @@ class Phono3py:
                     gamma_U=np.zeros_like(gamma)
                 for i, t in enumerate(temperatures):
                     ise.set_temperature(t)
-                    ise.run_at_sigma_and_temp()
+                    ise.run(scattering_class, is_triplet_symmetry=False)
                     gamma[i] = ise.get_imag_self_energy()
                     if is_nu:
                         gamma_N[i]=ise.get_imag_self_energy_N()
                         gamma_U[i]=ise.get_imag_self_energy_U()
 
                 for i, bi in enumerate(self._band_indices):
-                    pos = 0
-                    for j in range(i):
-                        pos += len(self._band_indices[j])
+                    # pos = 0
+                    # for j in range(i):
+                    #     pos += len(self._band_indices[j])
 
                     if not is_nu:
                         write_linewidth(gp,
                                         bi,
                                         temperatures,
-                                        gamma[:, pos:(pos+len(bi))],
+                                        gamma[:, i],
                                         self._mesh,
                                         sigma=sigma,
                                         filename=filename)
@@ -507,12 +445,12 @@ class Phono3py:
                         write_linewidth(gp,
                                         bi,
                                         temperatures,
-                                        gamma[:, pos:(pos+len(bi))],
+                                        gamma[:, i],
                                         self._mesh,
                                         sigma=sigma,
                                         filename=filename,
-                                        gamma_N=gamma_N[:, pos:(pos+len(bi))],
-                                        gamma_U=gamma_U[:, pos:(pos+len(bi))])
+                                        gamma_N=gamma_N[:, i],
+                                        gamma_U=gamma_U[:, i])
 
     def get_frequency_shift(self,
                             grid_points,
@@ -558,7 +496,7 @@ class Phono3py:
                                  coarse_mesh_shifts=None,
                                  cutoff_lifetime=1e-4,  # in second
                                  diff_kappa = 1e-5,  # relative
-                                 is_nu=False,
+                                 nu=None,
                                  no_kappa_stars=False,
                                  gv_delta_q=1e-4,  # for group velocity
                                  write_gamma=False,
@@ -576,7 +514,7 @@ class Phono3py:
                               grid_points=grid_points,
                               cutoff_lifetime=cutoff_lifetime,
                               diff_kappa= diff_kappa,
-                              is_nu=is_nu,
+                              nu=nu,
                               no_kappa_stars=no_kappa_stars,
                               gv_delta_q=gv_delta_q,
                               log_level=self._log_level,

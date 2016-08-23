@@ -121,7 +121,7 @@ parser.set_defaults(amplitude=None,
                     cutoff_pair_distance=None,
                     cutoff_delta=None,
                     cutoff_triplet=None,
-                    cutoff_frequency=1e-2,
+                    cutoff_frequency=1e-4,
                     cutoff_hfrequency=None, # frequency higher than this cutoff is not considered
                     cutoff_lifetime=1e-4,
                     displacement_distance=0.03,
@@ -177,6 +177,7 @@ parser.set_defaults(amplitude=None,
                     supercell_dimension_extra=None,
                     wstep=None,
                     symprec=1e-5,
+                    scattering_class=None,
                     tmax=None,
                     tmin=None,
                     tstep=None,
@@ -186,7 +187,7 @@ parser.set_defaults(amplitude=None,
                     write_amplitude=False,
                     write_gamma=False,
                     length=None,
-                    is_nu=False,
+                    nu=None,
                     is_ise=False,
                     write_grid_points=False,
                     write_triplet=False,
@@ -409,6 +410,8 @@ parser.add_option("--tsym", dest="is_translational_symmetry",
 parser.add_option("--qpermute", dest="is_qpoints_permute_symmetry",
                   action="store_true",
                   help="Impose translational invariance condition")
+parser.add_option("--sclass", dest="scattering_class", type=int,
+                  help="Scattering class when plotting the image self energy")
 parser.add_option("--tolerance", dest="symprec", type="float",
                   help="Symmetry tolerance to search")
 parser.add_option("-v", "--verbose", dest="verbose",
@@ -426,9 +429,8 @@ parser.add_option("--wgp", "--write_grid_points", dest="write_grid_points",
                   action="store_true",
                   help="Write grid address of irreducible grid points for specified mesh numbers to ir_grid_address.yaml")
 parser.add_option("--nu","--normal_umklapp",
-                  dest="is_nu",
-                  action="store_true",
-                  help="Tell Normal process and Umklapp process apart in relaxation time calculation")
+                  dest="nu", type="string",
+                  help="Tell Normal process and Umklapp process apart (N or U) in relaxation time calculation")
 parser.add_option("--write_amplitude", dest="write_amplitude",
                   action="store_true",
                   help="Write phonon-phonon interaction amplitudes")
@@ -1000,6 +1002,7 @@ if log_level:
         print "Grid points to be calculated:", grid_points
     sys.stdout.flush()
 
+scattering_class = options.scattering_class
 if run_mode == "joint_dos":
     joint_dos = JointDOS(
         supercell_dm,
@@ -1148,7 +1151,8 @@ elif run_mode=="linewidth":
         sigmas=multiple_sigmas,
         temperatures=temperatures,
         read_amplitude=settings.get_read_amplitude(),
-        is_nu=settings.get_is_nu(),
+        nu=settings.get_nu(),
+        scattering_class = scattering_class,
         band_paths= settings.get_bands(),
         filename=options.output_filename)
 elif run_mode=="image_self_energy":
@@ -1173,7 +1177,7 @@ elif run_mode == "bterta":
         coarse_mesh_shifts=settings.get_coarse_mesh_shifts(),
         cutoff_lifetime=settings.get_cutoff_lifetime(),
         diff_kappa= settings.get_diff_kappa(),
-        is_nu=settings.get_is_nu(),
+        nu=settings.get_nu(),
         no_kappa_stars=settings.get_no_kappa_stars(),
         gv_delta_q=settings.get_group_velocity_delta_q(),
         write_gamma=settings.get_write_gamma(),

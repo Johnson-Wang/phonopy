@@ -26,35 +26,41 @@ void reciprocal_to_normal(double *fc3_normal_squared,
 			  const int *band_indices,
 			  const int num_band0,
 			  const int num_band,
+			  const int pos_band0,
               const int *atc_rec, //inter-atomic triplets cut in the reciprocal force constants
               const char *g_skip,
 			  const double cutoff_frequency,
 			  const double cutoff_hfrequency,
               const double cutoff_delta)
 {
-  int i, j, k, bi, num_atom;
+  int i, j, k, bi, bj, bk, num_atom;
   double fff;
-
+  int nbs[3][3] = {{num_band0, num_band, num_band},
+                  {num_band, num_band0, num_band},
+                  {num_band, num_band, num_band0}};
+  int *nb = nbs[pos_band0];
   num_atom = num_band / 3;
   for (i=0; i< num_band0 * num_band * num_band; i++)
     fc3_normal_squared[i] = 0;
-  for (i = 0; i < num_band0; i++) {
-    bi = band_indices[i];
+  for (i = 0; i < nb[0]; i++) {
+    bi = (pos_band0 == 0? band_indices[i]: i);
     if (freqs0[bi] > cutoff_frequency && freqs0[bi] < cutoff_hfrequency) { // freqs0 limited in a range 
-      for (j = 0; j < num_band; j++) {
-        if (freqs1[j] > cutoff_frequency) {
-          for (k = 0; k < num_band; k++) {
-            if (g_skip[i * num_band * num_band + j * num_band + k]) continue;
-            if (freqs2[k] > cutoff_frequency) {
-              if (fabs(freqs0[bi] + freqs1[j] - freqs2[k]) > cutoff_delta &&
-                  fabs(freqs0[bi] - freqs1[j] + freqs2[k]) > cutoff_delta &&
-                  fabs(-freqs0[bi] + freqs1[j] + freqs2[k]) > cutoff_delta)
+      for (j = 0; j < nb[1]; j++) {
+        bj = (pos_band0 == 1? band_indices[j]: j);
+        if (freqs1[bj] > cutoff_frequency) {
+          for (k = 0; k < nb[2]; k++) {
+            bk = (pos_band0 == 2? band_indices[k]: k);
+            if (g_skip[i * nb[1] * nb[2] + j * nb[2] + k]) continue;
+            if (freqs2[bk] > cutoff_frequency) {
+              if (fabs(freqs0[bi] + freqs1[bj] - freqs2[bk]) > cutoff_delta &&
+                  fabs(freqs0[bi] - freqs1[bj] + freqs2[bk]) > cutoff_delta &&
+                  fabs(-freqs0[bi] + freqs1[bj] + freqs2[bk]) > cutoff_delta)
                     continue;
-              fff = freqs0[bi] * freqs1[j] * freqs2[k];
-              fc3_normal_squared[i * num_band * num_band +
-                     j * num_band +
+              fff = freqs0[bi] * freqs1[bj] * freqs2[bk];
+              fc3_normal_squared[i * nb[1] * nb[2] +
+                     j * nb[2] +
                      k] =
-                fc3_sum_squared(bi, j, k,
+                fc3_sum_squared(bi, bj, bk,
                         eigvecs0, eigvecs1, eigvecs2,
                         fc3_reciprocal,
                         atc_rec,
@@ -75,7 +81,7 @@ static double fc3_sum_squared(const int bi0,
 			      const lapack_complex_double *eigvecs1,
 			      const lapack_complex_double *eigvecs2,
 			      const lapack_complex_double *fc3_reciprocal,
-                              const int *atc_rec,
+                  const int *atc_rec,
 			      const double *masses,
 			      const int num_atom)
 {

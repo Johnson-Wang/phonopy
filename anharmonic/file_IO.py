@@ -630,7 +630,7 @@ def write_jointDOS(gp,
     w.close()
 
 def write_linewidth(gp,
-                    band_indices,
+                    band_index,
                     temperatures,
                     gamma,
                     mesh,
@@ -639,22 +639,23 @@ def write_linewidth(gp,
                     filename=None,
                     gamma_N=None,
                     gamma_U=None):
-    linewidth = gamma.sum(axis=1) * 2 / gamma.shape[1]
+    # linewidth = gamma.sum(axis=1) * 2 / gamma.shape[1]
+    linewidth = gamma * 2 # shape: ntemp
     lw_filename = "linewidth"
     lw_filename += "-m%d%d%d-g%d-" % (mesh[0], mesh[1], mesh[2], gp)
     if sigma is not None:
         lw_filename += ("s%f" % sigma).rstrip('0') + "-"
 
-    for i in band_indices:
-        lw_filename += "b%d" % (i + 1)
+    # for i in band_indice:
+    lw_filename += "b%d" % (band_index + 1)
 
     if not filename == None:
         lw_filename += ".%s" % filename
     elif is_nosym:
         lw_filename += ".nosym"
     if gamma_N is not None and gamma_U is not None:
-        linewidth_N = gamma_N.sum(axis=1)*2 / gamma_N.shape[1]
-        linewidth_U = gamma_U.sum(axis=1)*2 / gamma_U.shape[1]
+        linewidth_N = gamma_N*2
+        linewidth_U = gamma_U*2
         lw_filename += "-nu"
     lw_filename += ".dat"
 
@@ -667,16 +668,29 @@ def write_linewidth(gp,
         w.write("\n")
     w.close()
 
-def write_linewidth_band_csv(paths,
+def write_linewidth_band_csv(mesh,
+                             paths,
                              distances,
-                             lws, #[paths, qpoints, temperatures, band_indices,NU-processes]
+                             lws,  #[paths, qpoints, temperatures, band_indices,NU-processes]
                              band_indices,
                              temperatures,
                              frequencies=None,
                              eigenvectors=None,
-                             is_nu=False,
-                             filename="linewidth_band.csv"):
-    f = open(filename, 'wb')
+                             scattering_class=None,
+                             nu=None,
+                             filename=""):
+    filename_orig = 'linewidth'
+    filename_orig += "-m"+"".join(map(str, list(mesh)))
+    band_indices_new = np.array(band_indices).flatten() + 1
+    filename_orig += "-bi" + "".join(map(str, list(np.array(band_indices_new).flatten())))
+    filename_orig += filename
+    if scattering_class is not None:
+        filename_orig += '-scatt%d'%scattering_class
+    if nu is not None:
+        filename_orig += '-'+nu
+    filename_orig += '.csv'
+
+    f = open(filename_orig, 'wb')
     o=csv.writer(f)
     nqpoint = 0
     for qpoints in paths:
@@ -685,13 +699,13 @@ def write_linewidth_band_csv(paths,
     o.writerow(["npath",len(paths)])
     for t,temp in enumerate(temperatures):
         o.writerow(["temperature", temp])
-        if is_nu:
-            o.writerow(["q-position", "", "", "distance"]+
-                       ["linewidth-Total", "linewidth-N","linewidth-U" ]*len(band_indices)+
-                       ["frequency%s" %i for i in sum(band_indices,[])])
-        else:
-            o.writerow(["q-position", "", "", "distance" ,"linewidth-Total" ]+
-            ["frequency%s" %i for i in sum(band_indices,[])])
+        # if is_nu:
+        #     o.writerow(["q-position", "", "", "distance"]+
+        #                ["linewidth-Total", "linewidth-N","linewidth-U" ]*len(band_indices_new)+
+        #                ["frequency%s" %i for i in band_indices_new])
+        # else:
+        o.writerow(["q-position", "", "", "distance"] + ["linewidth-%d"%i for i in band_indices_new]+
+        ["frequency%d" %i for i in band_indices_new])
         for i, qpoints in enumerate(paths):
             for j, q in enumerate(qpoints):
                 o.writerow(list(q)+[distances[i][j]]+lws[i][j,t].flatten().tolist()+frequencies[i][j].tolist())

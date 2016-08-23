@@ -1,5 +1,6 @@
 import numpy as np
 from phonopy.harmonic.dynamical_matrix import DynamicalMatrix, DynamicalMatrixNAC, get_smallest_vectors
+from phonopy.phonon.band_structure import estimate_band_connection
 from phonopy.structure.symmetry import Symmetry
 from phonopy.structure.spglib import get_mappings
 from phonopy.units import VaspToTHz, total_time
@@ -244,6 +245,15 @@ class Interaction:
     def get_amplitude_all(self):
         return self._amplitude_all
 
+    def set_is_disperse(self, is_disperse):
+        self._is_dispersed = is_disperse
+
+    def set_is_symmetrize_fc3_q(self, is_symmetrize_fc3q):
+        self._symmetrize_fc3_q = is_symmetrize_fc3q
+
+    def get_is_symmetrize_fc3_q(self):
+        return self._symmetrize_fc3_q
+
     def run(self, g_skip=None, lang='C', log_level=0):
         num_band = self._primitive.get_number_of_atoms() * 3
         num_triplets = len(self._triplets_at_q)
@@ -282,6 +292,8 @@ class Interaction:
                     self._run_py(g_skip=g_skip)
 
             import anharmonic._phono3py as phono3c
+            if len(self._band_indices) != self._interaction_strength.shape[-1]:
+                assert (triplets_sequence[:,0] == 0).all()
             phono3c.interaction_from_reduced(self._interaction_strength,
                                          self._interaction_strength_reduced.astype("double").copy(),
                                          mapping.astype("intc"),
@@ -347,6 +359,79 @@ class Interaction:
             else:
                 for gp in enumerate(grid_points):
                     self._set_phonon_py(gp)
+
+    def set_phonons_all(self, is_band_connection=True, lang='C', log_level=1):
+        if log_level:
+            print "calculate phonon frequencies of all phonon mode..."
+        grid_points = np.arange(len(self._grid_address))
+        if lang == "C":
+            self._set_phonon_c(grid_points)
+        else:
+            for gp in grid_points:
+                self._set_phonon_py(gp)
+        if is_band_connection:
+            self._set_band_connection()
+
+    def _set_band_connection(self):
+        nqpoint, nband = self._frequencies.shape
+        is_non_degenerate = np.all(self._degenerates == np.arange(nband), axis=1)
+        connect_done = np.zeros(nqpoint, dtype='bool')
+        start = np.where(is_non_degenerate)[0][0]
+
+        while True:
+            connect_done[start] = True
+            neighbors = np.argsort(np.sum(np.abs(self._grid_address - self._grid_address[start]), axis=1))
+            undone = np.extract(connect_done[neighbors]==False, neighbors)
+
+            if not (len(undone) == 0 or (is_non_degenerate[undone] == False).all()):
+                new = np.extract(is_non_degenerate[undone], undone)[0]
+                new_neighbors = np.argsort(np.sum(np.abs(self._grid_address - self._grid_address[new]), axis=1))
+                new_neighbor_done = np.extract(connect_done[new_neighbors], new_neighbors)[0]
+                bo = estimate_band_connection(self._eigenvectors[new_neighbor_done],
+                                              self._eigenvectors[new],
+                                              np.arange(nband))
+                if bo is not None:
+                    self._frequencies[new] = (self._frequencies[new])[bo]
+                    self._eigenvectors[new] = (self._eigenvectors[new].T)[bo].T
+                start = new
+            else:
+                break
+
+        for new in undone:
+            new_neighbors = np.argsort(np.sum(np.abs(self._grid_address - self._grid_address[new]), axis=1))
+            new_neighbor_done = np.extract(connect_done[new_neighbors], new_neighbors)[0]
+            deg = [np.where(self._degenerates[new] == j)[0] for j in np.unique(self._degenerates[new])]
+            bo = estimate_band_connection(self._eigenvectors[new_neighbor_done],
+                                          self._eigenvectors[new],
+                                          np.arange(nband),
+                                          degenerate_sets=deg)
+            if bo is not None:
+                self._frequencies[new] = (self._frequencies[new])[bo]
+                self._eigenvectors[new] = (self._eigenvectors[new].T)[bo].T
+                degenerate_tmp = (self._degenerates[new])[bo].copy()
+                for j in range(1, nband):
+                    if degenerate_tmp[j] == degenerate_tmp[j-1]:
+                        self._degenerates[new, j] = self._degenerates[new, j - 1]
+                    else:
+                        self._degenerates[new, j] = j
+
+
+
+
+
+
+        # for i in np.arange(2, nqpoint):
+        #     deg = [np.where(self._degenerates[i] == j)[0] for j in np.unique(self._degenerates[i])]
+        #     bo = estimate_band_connection(self._eigenvectors[i-1], self._eigenvectors[i], np.arange(nband), degenerate_sets=deg)
+        #     if bo is not None:
+        #         self._frequencies[i] = (self._frequencies[i])[bo]
+        #         self._eigenvectors[i] = (self._eigenvectors[i].T)[bo].T
+        #         degenerate_tmp = (self._degenerates[i])[bo].copy()
+        #         for j in range(1, nband):
+        #             if degenerate_tmp[j] == degenerate_tmp[j-1]:
+        #                 self._degenerates[i, j] = self._degenerates[i, j - 1]
+        #             else:
+        #                 self._degenerates[i, j] = j
 
     def get_interaction_strength(self):
         return self._interaction_strength
@@ -447,7 +532,8 @@ class Interaction:
     def set_grid_point(self, grid_point, i=None, stores_triplets_map=False):
         if i==None:
             self._grid_point = grid_point
-            self._i = np.where(grid_point == self._grid_points)[0][0]
+            if self._grid_points is not None:
+                self._i = np.where(grid_point == self._grid_points)[0][0]
         else:
             self._i = i
             self._grid_point = self._grid_points[i]
@@ -677,9 +763,7 @@ class Interaction:
         import anharmonic._phono3py as phono3c
         if g_skip is None:
             g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
-        else:
-            assert g_skip.shape == self._interaction_strength_reduced.shape
-
+        assert g_skip.shape == self._interaction_strength_reduced.shape
         self._set_phonon_c()
         svecs, multiplicity = get_smallest_vectors(self._supercell,
                                                    self._primitive,
@@ -692,7 +776,7 @@ class Interaction:
         phono3c.interaction(self._interaction_strength_reduced,
                             self._frequencies,
                             self._eigenvectors,
-                            self._triplets_at_q_reduced,
+                            self._triplets_at_q_reduced.copy(),
                             self._grid_address,
                             self._mesh,
                             self._fc3,
@@ -709,32 +793,37 @@ class Interaction:
                             self._cutoff_frequency,
                             self._cutoff_hfrequency,
                             self._cutoff_delta)
-        # phono3c.interaction_degeneracy_grid(self._interaction_strength_reduced,
-        #                                     self._degenerates,
-        #                                     self._triplets_at_q_reduced)
-        #
-        # interaction0 = np.zeros_like(self._interaction_strength_reduced)
-        # phono3c.interaction(interaction0,
-        #                     self._frequencies,
-        #                     self._eigenvectors,
-        #                     self._triplets_at_q_reduced.copy(),
-        #                     self._grid_address,
-        #                     self._mesh,
-        #                     self._fc3,
-        #                     atc,
-        #                     atc_rec,
-        #                     g_skip,
-        #                     svecs,
-        #                     multiplicity,
-        #                     np.double(masses),
-        #                     p2s,
-        #                     s2p,
-        #                     self._band_indices,
-        #                     True,
-        #                     self._cutoff_frequency,
-        #                     self._cutoff_hfrequency,
-        #                     self._cutoff_delta)
-        # diff = np.abs(self._interaction_strength_reduced - interaction0)
+        phono3c.interaction_degeneracy_grid(self._interaction_strength_reduced,
+                                            self._degenerates,
+                                            self._triplets_at_q_reduced,
+                                            self._band_indices)
+        # from itertools import permutations
+        # interaction = np.zeros((6,) + self._interaction_strength_reduced.shape, dtype='double')
+        # for i, permute in enumerate(permutations((0,1,2))):
+        #     interaction0 = np.zeros_like(self._interaction_strength_reduced)
+        #     new = ''.join(np.array(list('ijk'))[list(permute)])
+        #     phono3c.interaction(interaction0,
+        #                         self._frequencies,
+        #                         self._eigenvectors,
+        #                         self._triplets_at_q_reduced[:, permute].copy(),
+        #                         self._grid_address,
+        #                         self._mesh,
+        #                         self._fc3,
+        #                         atc,
+        #                         atc_rec,
+        #                         np.einsum("Nijk->N%s"%new, g_skip).copy(),
+        #                         svecs,
+        #                         multiplicity,
+        #                         np.double(masses),
+        #                         p2s,
+        #                         s2p,
+        #                         self._band_indices,
+        #                         False,
+        #                         self._cutoff_frequency,
+        #                         self._cutoff_hfrequency,
+        #                         self._cutoff_delta)
+        #     interaction[i,:] = np.einsum("N%s->Nijk"%new, interaction0)
+        # diff = np.abs(self._interaction_strength_reduced - np.average(interaction, axis=0))
         # print np.unravel_index(diff.argmax(), diff.shape), diff.max()
 
 

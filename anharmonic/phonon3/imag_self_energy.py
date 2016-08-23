@@ -2,7 +2,6 @@ import numpy as np
 from phonopy.units import THzToEv, Kb, Hbar, EV, Angstrom, THz, AMU
 from phonopy.phonon.group_velocity import degenerate_sets
 from triplets import get_triplets_integration_weights
-
 def gaussian(x, sigma):
     return 1.0 / np.sqrt(2 * np.pi) / sigma * np.exp(-x**2 / 2 / sigma**2)
 
@@ -13,17 +12,20 @@ def occupation(x, t):
 class ImagSelfEnergy:
     def __init__(self,
                  interaction,
-                 is_nu=False,
+                 nu=None,
                  is_thm=False,
                  grid_point=None,
                  fpoints=None,
                  temperature=None,
                  sigma=None,
-                 cutoff_lifetime=1e-4, # inseconds
+                 cutoff_lifetime=1e-4,  # inseconds
+                 is_band_connection=True,
                  lang='C'):
         self._interaction = interaction
+        if is_band_connection:
+            interaction.set_phonons_all(is_band_connection=is_band_connection)
         self._cutoff_delta = interaction._cutoff_delta
-        self._is_nu=is_nu
+        self._nu=nu
         self._is_thm = is_thm
         self.set_temperature(temperature)
         self.set_fpoints(fpoints)
@@ -39,8 +41,9 @@ class ImagSelfEnergy:
         self._frequencies = None
         self._grid_point_triplets = None
         self._triplet_weights = None
-        self._band_indices = None
+        self._band_indices = self._interaction.get_band_indices()
         self._unit_conversion = None
+        self._g = None
         self._cutoff_frequency = interaction.get_cutoff_frequency()
         self._cutoff_hfrequency = interaction.get_cutoff_hfrequency()
 
@@ -48,46 +51,37 @@ class ImagSelfEnergy:
         self._interaction.set_grid_points(grid_points)
 
 
-    def set_nu_properties(self):
-        self._imag_self_energy_N=np.zeros_like(self._imag_self_energy)
-        self._imag_self_energy_U=np.zeros_like(self._imag_self_energy)
-        self._grid_point_triplets_N=self._grid_point_triplets[self._triplets_index_N]
-        self._grid_point_triplets_U=self._grid_point_triplets[self._triplets_index_U]
-        self._fc3_normal_squared_N=self._fc3_normal_squared[self._triplets_index_N]
-        self._fc3_normal_squared_U=self._fc3_normal_squared[self._triplets_index_U]
-        self._triplet_weights_N=self._triplet_weights[self._triplets_index_N]
-        self._triplet_weights_U=self._triplet_weights[self._triplets_index_U]
-
-    def run(self):
+    def run(self, scattering_class=None, is_triplet_symmetry=True,):
         if self._fc3_normal_squared is None:        
             self.run_interaction()
-        self.set_integration_weights()
+        if self._g is None:
+            self.set_integration_weights(scattering_event_class=scattering_class, is_triplet_symmetry=is_triplet_symmetry)
         num_band0 = self._fc3_normal_squared.shape[1]
 
-        if not self._is_thm:
-            if self._fpoints is None:
-                self._imag_self_energy = np.zeros(num_band0, dtype='double')
-                if self._is_nu:
-                    self.set_nu_properties()
-                if self._lang == 'C':
-                    self._run_c_with_band_indices()
-                else:
-                    self._run_py_with_band_indices()
-            else:
-                self._imag_self_energy = np.zeros((len(self._fpoints), num_band0),
-                                                  dtype='double')
-                if self._lang == 'C':
-                    self._run_c_with_fpoints()
-                else:
-                    self._run_py_with_fpoints()
+        # if not self._is_thm:
+        #     if self._fpoints is None:
+        #         self._imag_self_energy = np.zeros(num_band0, dtype='double')
+        #         if self._is_nu:
+        #             self.set_nu_properties()
+        #         if self._lang == 'C':
+        #             self._run_c_with_band_indices()
+        #         else:
+        #             self._run_py_with_band_indices()
+        #     else:
+        #         self._imag_self_energy = np.zeros((len(self._fpoints), num_band0),
+        #                                           dtype='double')
+        #         if self._lang == 'C':
+        #             self._run_c_with_fpoints()
+        #         else:
+        #             self._run_py_with_fpoints()
+        # else:
+        if self._fpoints is None:
+            self._imag_self_energy = np.zeros(num_band0, dtype='double')
+            self._run_thm_with_band_indices()
         else:
-            if self._fpoints is None:
-                self._imag_self_energy = np.zeros(num_band0, dtype='double')
-                self._run_thm_with_band_indices()
-            else:
-                self._imag_self_energy = np.zeros(
-                    (len(self._fpoints), num_band0), dtype='double')
-                self._run_thm_with_frequency_points()
+            self._imag_self_energy = np.zeros(
+                (len(self._fpoints), num_band0), dtype='double')
+            self._run_thm_with_frequency_points()
 
     def _run_thm_with_band_indices(self):
         if self._g is not None:
@@ -213,10 +207,11 @@ class ImagSelfEnergy:
                                      self._frequencies,
                                      self._temperature,
                                      self._g,
+                                     np.array(self._band_indices).flatten().astype('intc'),
                                      self._unit_conversion,
                                      self._cutoff_frequency)
 
-    def set_integration_weights(self, scattering_event_class=None):
+    def set_integration_weights(self, scattering_event_class=None, is_triplet_symmetry=True):
         if self._fpoints is None:
             f_points = self._frequencies[self._grid_point][self._band_indices]
         else:
@@ -225,20 +220,38 @@ class ImagSelfEnergy:
         self._g = get_triplets_integration_weights(
             self._interaction,
             np.array(f_points, dtype='double'),
-            self._sigma)
+            self._sigma,
+            is_triplet_symmetry = is_triplet_symmetry)
 
+        # self._g = np.where(self._g > 1e2, 0, self._g)
         if scattering_event_class == 1:
             self._g[0] = 0
         elif scattering_event_class == 2:
             self._g[1] = 0
             self._g[2] = 0
 
-    def run_interaction(self, is_triplets_dispersed=False, log_level=0):
+        if self._nu is not None:
+            grid_addresses = self._interaction.get_grid_address()
+            triplets_sum = grid_addresses[self._grid_point_triplets].sum(axis=1)
+            is_normal_process = np.alltrue(triplets_sum == 0, axis=-1)
+            if self._nu == "N":
+                self._g[:, np.where(is_normal_process == False)] = 0
+            elif self._nu == "U":
+                self._g[:, np.where(is_normal_process)] = 0
+
+    def run_interaction(self, scattering_class = None, is_triplets_dispersed=False, log_level=0):
         self.set_phonons(lang=self._lang)
-        self._interaction.run(lang=self._lang,
+        self.set_integration_weights(scattering_event_class=scattering_class, is_triplet_symmetry=self._interaction._symmetrize_fc3_q)
+        if self._interaction._is_dispersed:
+            uniq, index = np.unique(self._interaction._triplets_maping_at_grid, return_index=True)
+            g_skip = (np.abs(self._g[:, index]).sum(axis=0) < 1e-8)
+        else:
+            g_skip = (np.abs(self._g).sum(axis=0) < 1e-8)
+        # g_skip = None
+        self._interaction.run(g_skip=g_skip,
+                              lang=self._lang,
                               log_level=log_level)
         self._fc3_normal_squared = self._interaction.get_interaction_strength()
-        self._band_indices = self._interaction.get_band_indices()
         mesh = self._interaction.get_mesh_numbers()
         num_grid = np.prod(mesh)
 
@@ -259,7 +272,7 @@ class ImagSelfEnergy:
     def get_imag_self_energy(self):
         if self._cutoff_frequency is None:
             return self._imag_self_energy
-        else: # Averaging imag-self-energies by degenerate bands
+        else: # AverXaging imag-self-energies by degenerate bands
             imag_se = np.zeros_like(self._imag_self_energy)
             freqs = self._frequencies[self._grid_point]
             deg_sets = degenerate_sets(freqs) # such like [[0,1], [2], [3,4,5]]
@@ -278,52 +291,6 @@ class ImagSelfEnergy:
                                 self._imag_self_energy[:, bi_set].sum(axis=1) /
                                 len(bi_set))
             return imag_se
-
-    def get_imag_self_energy_N(self):
-        if self._cutoff_frequency is None:
-            return self._imag_self_energy_N
-        else: # Averaging imag-self-energies by degenerate bands
-            imag_se = np.zeros_like(self._imag_self_energy_N)
-            freqs = self._frequencies[self._grid_point]
-            deg_sets = degenerate_sets(freqs) # such like [[0,1], [2], [3,4,5]]
-            for dset in deg_sets:
-                bi_set = []
-                for i, bi in enumerate(self._band_indices):
-                    if bi in dset:
-                        bi_set.append(i)
-                if len(bi_set) > 0:
-                    for i in bi_set:
-                        if self._fpoints is None:
-                            imag_se[i] = (self._imag_self_energy_N[bi_set].sum() /
-                                          len(bi_set))
-                        else:
-                            imag_se[:, i] = (
-                                self._imag_self_energy_N[:, bi_set].sum(axis=1) /
-                                len(bi_set))
-            return imag_se
-
-    def get_imag_self_energy_U(self):
-        if self._cutoff_frequency is None:
-            return self._imag_self_energy_U
-        else: # Averaging imag-self-energies by degenerate bands
-            imag_se = np.zeros_like(self._imag_self_energy_U)
-            freqs = self._frequencies[self._grid_point]
-            deg_sets = degenerate_sets(freqs) # such like [[0,1], [2], [3,4,5]]
-            for dset in deg_sets:
-                bi_set = []
-                for i, bi in enumerate(self._band_indices):
-                    if bi in dset:
-                        bi_set.append(i)
-                if len(bi_set) > 0:
-                    for i in bi_set:
-                        if self._fpoints is None:
-                            imag_se[i] = (self._imag_self_energy_U[bi_set].sum() /
-                                          len(bi_set))
-                        else:
-                            imag_se[:, i] = (
-                                self._imag_self_energy_U[:, bi_set].sum(axis=1) /
-                                len(bi_set))
-            return imag_se
             
     def get_phonon_at_grid_point(self):
         return (self._frequencies[self._grid_point],
@@ -337,8 +304,6 @@ class ImagSelfEnergy:
             self._fc3_normal_squared = None
             (self._grid_point_triplets,
              self._triplet_weights) = self._interaction.get_triplets_at_q()
-            if self._is_nu:
-                (self._triplets_index_N, self._triplets_index_U) = self._interaction.get_triplets_at_q_nu()
             self._grid_point = self._grid_point_triplets[0, 0]
 
         
@@ -347,7 +312,10 @@ class ImagSelfEnergy:
             self._sigma = None
         else:
             self._sigma = float(sigma)
-            self._asigma = np.ones((len(self._grid_point_triplets),)+ self._fc3_normal_squared.shape[1:], dtype="float") * sigma
+            nband0 = len(self._band_indices)
+            prim = self._interaction.get_primitive()
+            nband = prim.get_number_of_atoms() * 3
+            self._asigma = np.ones((len(self._grid_point_triplets), nband0, nband, nband), dtype="double") * sigma
 
     def set_adaptive_sigma(self, triplet_indices, gamma):
         self._asigma=np.zeros_like(self._fc3_normal_squared)
@@ -387,35 +355,6 @@ class ImagSelfEnergy:
                                           self._cutoff_frequency,
                                           self._cutoff_hfrequency,
                                           self._cutoff_gamma)
-        if self._is_nu:
-            if len(self._triplets_index_N):
-                phono3c.imag_self_energy_at_bands(self._imag_self_energy_N,
-                                                  self._fc3_normal_squared_N,
-                                                  self._grid_point_triplets_N,
-                                                  self._triplet_weights_N,
-                                                  self._frequencies,
-                                                  self._band_indices,
-                                                  self._temperature,
-                                                  self._asigma,
-                                                  self._unit_conversion,
-                                                  self._cutoff_delta,
-                                                  self._cutoff_frequency,
-                                                  self._cutoff_hfrequency,
-                                                  self._cutoff_gamma)
-            if len(self._triplets_index_U):
-                phono3c.imag_self_energy_at_bands(self._imag_self_energy_U,
-                                                  self._fc3_normal_squared_U,
-                                                  self._grid_point_triplets_U,
-                                                  self._triplet_weights_U,
-                                                  self._frequencies,
-                                                  self._band_indices,
-                                                  self._temperature,
-                                                  self._asigma,
-                                                  self._unit_conversion,
-                                                  self._cutoff_delta,
-                                                  self._cutoff_frequency,
-                                                  self._cutoff_hfrequency,
-                                                  self._cutoff_gamma)
 
     def _run_c_with_fpoints(self):
         import anharmonic._phono3py as phono3c

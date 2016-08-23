@@ -175,16 +175,16 @@ def get_triplets_integration_weights(interaction,
                                      neighboring_phonons=True,
                                      triplets=None,
                                      lang='C',
-                                     is_triplet_symmetry=True):
+                                     is_triplet_symmetry=False):
     "g0: -0 + 1 + 2; g1: -0 + 1 - 2; g2: -0 -1 + 2"
     if triplets == None:
         triplets = interaction.get_triplets_at_q()[0]
     frequencies = interaction.get_phonons()[0]
     num_band = frequencies.shape[1]
+    num_grids = frequencies.shape[0]
     g = np.zeros(
         (3, len(triplets), len(frequency_points), num_band, num_band),
         dtype='double')
-
     if sigma_object is not None:
         if lang == 'C':
             import anharmonic._phono3py as phono3c
@@ -244,7 +244,7 @@ def _set_triplets_integration_weights_c(g,
                                         frequency_points,
                                         neighboring_phonons=True,
                                         triplets_at_q=None,
-                                        is_triplet_symmetry=True):
+                                        is_triplet_symmetry=False):
     import anharmonic._phono3py as phono3c
     if triplets_at_q == None:
         triplets_at_q = interaction.get_triplets_at_q()[0]
@@ -269,14 +269,15 @@ def _set_triplets_integration_weights_c(g,
                 bz_map)
             interaction.set_phonons(np.unique(neighboring_grid_points))
 
+    frequencies = interaction.get_phonons()[0]
     if not is_triplet_symmetry:
         phono3c.triplets_integration_weights(
             g,
             frequency_points,
-            thm.get_tetrahedra(),
+            thm.get_tetrahedra().astype("intc").copy(),
             mesh,
             triplets_at_q,
-            interaction.get_phonons()[0],
+            frequencies,
             grid_address,
             bz_map)
     else:
@@ -285,7 +286,7 @@ def _set_triplets_integration_weights_c(g,
         thm.get_tetrahedra().astype("intc").copy(),
         mesh,
         triplets_at_q,
-        interaction.get_phonons()[0],
+        frequencies,
         grid_address,
         bz_map)
 

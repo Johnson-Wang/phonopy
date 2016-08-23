@@ -86,13 +86,10 @@ def estimate_band_connection(prev_eigvecs, eigvecs, prev_band_order, degenerate=
         max_index = np.argsort(overlaps)[-len(bi):].tolist()
         connection_order += max_index
     band_order = np.arange(len(connection_order))
-    connection_order = np.array(connection_order, dtype=np.int)
-    # order_raw = prev_band_order[connection_order]
+    connection_order = np.array(connection_order, dtype=np.int) # s12
     for bi in degenerate:
-        x = prev_band_order[bi]
-        band_order[bi] = np.sort(connection_order[x])
-        # band_order[bi] = np.sort(order_raw[bi])
-    return band_order
+        band_order[np.sort(connection_order[bi])] = bi# band_order : s21
+    return band_order[prev_band_order]# s21[s10] = s20
 
 def _get_qpoint_symmetry(mesh,
                          is_shift,

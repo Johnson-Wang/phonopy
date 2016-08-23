@@ -3,7 +3,7 @@
 
 #include "mathfunc.h"
 #include "debug.h"
-
+#define INVSQRT2PI 0.3989422804014327
 
 /*      6-------7             */
 /*     /|      /|             */
@@ -136,6 +136,7 @@ static int db_relative_grid_address[4][24][4][3] = {
     { { 0,  0,  0}, { 0,  0, -1}, {-1, -1,  0}, {-1,  0,  0}, },
   },
 };
+static double gaussian(const double x, const double sigma);
 
 static void
 get_integration_weight_at_omegas(double *integration_weights,
@@ -305,6 +306,11 @@ static double _I_11_1D(const double omega,
 		    const double vertices_omegas[2]);
 static double _I_2_1D(void);
 
+static double gaussian(const double x, const double sigma)
+{
+  return INVSQRT2PI / sigma * exp(-x * x / 2 / sigma / sigma);
+}
+
 void thm_get_relative_grid_address(int relative_grid_address[24][4][3],
 				   SPGCONST double rec_lattice[3][3])
 {
@@ -410,34 +416,45 @@ get_integration_weight(const double omega,
 				    const double[4]))
 {
   int i, j, ci;
-  double sum;
+  double sum, sum_temp, omega_temp = omega;
   double v[4];
-
+  double precesion=1e-5, diff;
+  int is_delta;
   sum = 0;
   for (i = 0; i < 24; i++) {
+    sum_temp=0.;
     for (j = 0; j < 4; j++) {
       v[j] = tetrahedra_omegas[i][j];
     }
     ci = sort_omegas(v);
-    if (omega < v[0]) {
-      sum += IJ(0, ci, omega, v) * gn(0, omega, v);
+    is_delta = 0;
+//    if (v[3] - v[0] < precesion){
+//      is_delta = 1;
+//      diff = v[3] - v[0];
+//      if (omega_temp > v[3] && omega_temp - v[3] < diff) omega_temp -= diff;
+//      else if (omega_temp < v[0] && v[0] - omega_temp < diff) omega_temp += diff;
+//    }
+    if (omega_temp < v[0]) {
+      sum_temp += IJ(0, ci, omega_temp, v) * gn(0, omega_temp, v);
     } else {
-      if (v[0] < omega && omega < v[1]) {
-	sum += IJ(1, ci, omega, v) * gn(1, omega, v);
+      if (v[0] < omega_temp && omega_temp < v[1]) {
+	sum_temp += IJ(1, ci, omega_temp, v) * gn(1, omega_temp, v);
       } else {
-	if (v[1] < omega && omega < v[2]) {
-	  sum += IJ(2, ci, omega, v) * gn(2, omega, v);
+	if (v[1] < omega_temp && omega_temp < v[2]) {
+	  sum_temp += IJ(2, ci, omega_temp, v) * gn(2, omega_temp, v);
 	} else {
-	  if (v[2] < omega && omega < v[3]) {
-	    sum += IJ(3, ci, omega, v) * gn(3, omega, v);
+	  if (v[2] < omega_temp && omega_temp < v[3]) {
+	    sum_temp += IJ(3, ci, omega_temp, v) * gn(3, omega_temp, v);
 	  } else {
-	    if (v[3] < omega) {
-	      sum += IJ(4, ci, omega, v) * gn(4, omega, v);
+	    if (v[3] < omega_temp) {
+	      sum_temp += IJ(4, ci, omega_temp, v) * gn(4, omega_temp, v);
 	    }
 	  }
 	}
       }
     }
+  if (is_delta) sum+= sum_temp / 4.;
+  else sum += sum_temp;
   }
   return sum / 6;
 }

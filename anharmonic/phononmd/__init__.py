@@ -179,7 +179,7 @@ class Phonompy:
                               coarse_mesh_shifts=coarse_mesh_shifts,
                               cutoff_lifetime=cutoff_lifetime,
                               diff_kappa= diff_gamma,
-                              is_nu=is_nu,
+                              nu=is_nu,
                               no_kappa_stars=no_kappa_stars,
                               gv_delta_q=gv_delta_q,
                               log_level=self._log_level,

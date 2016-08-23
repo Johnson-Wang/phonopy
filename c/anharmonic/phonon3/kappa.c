@@ -241,31 +241,30 @@ void get_interaction_from_reduced(double *interaction,
 				  const double *interaction_all,
 				  const int *triplet_mapping,
 				  const char *triplet_sequence,
-				  const int num_triplet, 
+				  const int num_triplet,
+				  const int num_band0,
 				  const int num_band)
 {
   int triplet, i, j, k, iunique, ijk[3];
   int bb = num_band * num_band;
-  int bbb = num_band * num_band * num_band;
-  char seq[3];
+  int bbb = num_band0 * num_band * num_band;
+  char *seq;
   #pragma parallel for private(iunique, i, j, k, ijk, seq)
   for (triplet=0; triplet<num_triplet;triplet++)
   {
     iunique = triplet_mapping[triplet];
-    seq[0] =  triplet_sequence[triplet*3+0];
-    seq[1] =  triplet_sequence[triplet*3+1];
-    seq[2] =  triplet_sequence[triplet*3+2];
-    for (i=0; i<num_band; i++)
-    { 
+    seq =  triplet_sequence + triplet * 3;
+    for (i=0; i<num_band0; i++)
+    {
       ijk[0] = i;
       for (j=0; j<num_band; j++)
       {
-	ijk[1] = j;
-	for (k=0; k<num_band;k++)
-	{
-	  ijk[2] = k;
-	  interaction[triplet*bbb+ijk[seq[0]]*bb+ijk[seq[1]]*num_band+ijk[seq[2]]] = interaction_all[iunique*bbb+i*bb+j*num_band+k]; 
-	}
+        ijk[1] = j;
+        for (k=0; k<num_band;k++)
+        {
+          ijk[2] = k;
+          interaction[triplet*bbb+ijk[seq[0]]*bb+ijk[seq[1]]*num_band+ijk[seq[2]]] = interaction_all[iunique*bbb+i*bb+j*num_band+k];
+        }
       }
     }
   }

@@ -10,7 +10,7 @@ class Phono3pySettings(Settings):
         self._cutoff_delta = None
         self._cutoff_triplet = None
         self._cutoff_radius = None
-        self._cutoff_frequency = 1e-2
+        self._cutoff_frequency = 1e-4
         self._cutoff_hfrequency = None
         self._cutoff_lifetime = 1e-4 # in second
         self._diff_kappa = 1e-5 # relative
@@ -22,7 +22,7 @@ class Phono3pySettings(Settings):
         self._is_ise=False
         self._is_bterta = False
         self._is_linewidth = False
-        self._is_nu = False
+        self._nu = None
         self._is_isotope = False
         self._is_frequency_shift = False
         self._max_ite = None
@@ -154,11 +154,11 @@ class Phono3pySettings(Settings):
     def get_is_linewidth(self):
         return self._is_linewidth
 
-    def set_is_nu(self,is_nu):
-        self._is_nu = is_nu
+    def set_nu(self, nu):
+        self._nu = nu
 
-    def get_is_nu(self):
-        return self._is_nu
+    def get_nu(self):
+        return self._nu
 
     def set_is_isotope(self,isotope):
         self._is_isotope = isotope
@@ -477,9 +477,9 @@ class Phono3pyConfParser(ConfParser):
                 if self._options.is_linewidth:
                     self._confs['linewidth'] = '.true.'
 
-            if opt.dest == 'is_nu':
-                if self._options.is_nu:
-                    self._confs['nu']='.true.'
+            if opt.dest == 'nu':
+                if self._options.nu:
+                    self._confs['nu']= self._options.nu
 
             if opt.dest == 'read_fc2':
                 if self._options.read_fc2:
@@ -640,8 +640,10 @@ class Phono3pyConfParser(ConfParser):
                     self.set_parameter('is_linewidth', True)
 
             if conf_key == 'nu':
-                if confs['nu']== '.true.':
-                    self.set_parameter('is_nu',True)
+                if confs['nu'] is not None:
+                    nu  = confs['nu'].strip().upper()[0]
+                    if nu == "N" or nu == "U":
+                        self.set_parameter('nu',nu)
 
             if conf_key == 'read_fc2':
                 if confs['read_fc2']== '.true.':
@@ -765,9 +767,13 @@ class Phono3pyConfParser(ConfParser):
         if params.has_key("cutoff_delta"):
             self._settings.set_cutoff_delta(params["cutoff_delta"])
 
-        # Phonon modes below this frequency are ignored.
+        # Phonon modes larger than this frequency are ignored.
         if params.has_key('cutoff_hfrequency'):
             self._settings.set_cutoff_hfrequency(params['cutoff_hfrequency'])
+
+        # Phonon modes smaller than this frequency are ignored.
+        if params.has_key('cutoff_frequency'):
+            self._settings.set_cutoff_frequency(params['cutoff_frequency'])
 
         # Cutoff lifetime used for thermal conductivity calculation
         if params.has_key('cutoff_lifetime'):
@@ -813,8 +819,8 @@ class Phono3pyConfParser(ConfParser):
         if params.has_key('is_linewidth'):
             self._settings.set_is_linewidth(params['is_linewidth'])
         # Tell Normal and Umklapp process apart
-        if params.has_key('is_nu'):
-            self._settings.set_is_nu(params['is_nu'])
+        if params.has_key('nu'):
+            self._settings.set_nu(params['nu'])
 
         if params.has_key("read_fc2"):
             self._settings.set_read_fc2(params['read_fc2'])

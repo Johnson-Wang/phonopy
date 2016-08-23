@@ -166,7 +166,8 @@ class JointDos:
                 self,
                 np.array([freq_point], dtype='double'),
                 self._sigma,
-                neighboring_phonons=(i == 0))
+                neighboring_phonons=(i == 0),
+                is_triplet_symmetry=False)
 
 
             if self._temperatures is None:
