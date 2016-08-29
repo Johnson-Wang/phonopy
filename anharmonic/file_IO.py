@@ -8,6 +8,7 @@ from phonopy.interface import vasp
 from phonopy.harmonic.force_constants import similarity_transformation
 from phonopy.file_IO import write_FORCE_SETS_vasp, read_force_constant_vasprun_xml, parse_FORCE_SETS
 from phonopy.harmonic.forces import Forces
+from phonopy.units import total_time
 
 ###########
 #
@@ -795,6 +796,7 @@ def write_iso_scattering_to_hdf5(gamma_iso,
     w.create_dataset('gamma_iso', data=gamma_iso)
     w.close()
 
+@total_time.timeit
 def write_collision_to_hdf5_all(collision_all,
                                 mesh,
                                 sigma,
@@ -822,6 +824,7 @@ def write_collision_to_hdf5_all(collision_all,
     if log_level:
         print "Irreducible scattering rate written to %s" %name
 
+@total_time.timeit
 def write_collision_to_hdf5_at_grid(collision_at_grid,
                                     mesh,
                                     grid,
@@ -857,7 +860,7 @@ def write_collision_to_hdf5_at_grid(collision_at_grid,
     if log_level:
         print "Irreducible scattering rate written to %s" %name
 
-
+@total_time.timeit
 def read_collision_all_from_hdf5(collision_all,
                                  mesh,
                                  sigma,
@@ -889,6 +892,7 @@ def read_collision_all_from_hdf5(collision_all,
     if log_level:
         print "Irreducible scattering rate read from %s" %name
 
+@total_time.timeit
 def read_collision_at_grid_from_hdf5(collision,
                                      mesh,
                                      grid,
@@ -1250,6 +1254,7 @@ def read_kappa_from_hdf5(mesh,
 
     return data
 
+@total_time.timeit
 def write_amplitude_to_hdf5(amplitude,
                             mesh,
                             grid_point,
@@ -1271,6 +1276,7 @@ def write_amplitude_to_hdf5(amplitude,
         w.create_dataset('eigenvector', data=eigenvector)
     w.close()
 
+@total_time.timeit
 def write_amplitude_to_hdf5_all(amplitude, mesh, is_nosym=False):
     suffix = "-m%d%d%d" % tuple(mesh)
     if is_nosym:
@@ -1310,6 +1316,7 @@ def write_triplets_to_hdf5(mesh,
         w.create_dataset('/'.join(("pgoi_at_q", str(g))),data=pgoi_at_q)
     w.close()
 
+@total_time.timeit
 def read_amplitude_from_hdf5(amplitudes_at_q,
                                  mesh,
                                  triplets_mapping_at_q,
@@ -1329,6 +1336,7 @@ def read_amplitude_from_hdf5(amplitudes_at_q,
             amplitudes_at_q[i] =np.einsum("ijk->%s"%index, amplitudes_all[triplets_mapping_at_q[i]])
     f.close()
 
+@total_time.timeit
 def read_amplitude_from_hdf5_all(amplitude_all, mesh, is_nosym=False): #band indices
     suffix = "-m%d%d%d" % tuple(mesh)
     if is_nosym:
@@ -1391,6 +1399,7 @@ def _write_joint_dos_at_t(gp,
         w.write("\n")
     w.close()
 
+@total_time.timeit
 def read_amplitude_from_hdf5_at_grid(mesh, grid, path = None, is_nosym = False):
     suffix = "-m%d%d%d" % tuple(mesh)
     suffix += "-g%d"%grid
@@ -1408,6 +1417,7 @@ def read_amplitude_from_hdf5_at_grid(mesh, grid, path = None, is_nosym = False):
     f.close()
     return amplitude
 
+@total_time.timeit
 def write_amplitude_to_hdf5_at_grid(mesh, grid, amplitude, path = None, is_nosym = False):
     suffix = "-m%d%d%d" % tuple(mesh)
     suffix += "-g%d"%grid

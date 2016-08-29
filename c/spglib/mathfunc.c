@@ -6,7 +6,9 @@
 #include "mathfunc.h"
 
 #include "debug.h"
+#define SQRT2 1.4142135623730951
 
+static double erf(double x);
 double mat_get_determinant_d3(SPGCONST double a[3][3])
 {
   return a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
@@ -472,4 +474,21 @@ int mat_index_from_Iarray(const int *a, const int length, const int value)
     }
   }
   return index;
+}
+
+static double erf(double x)
+{
+ double tau, v;
+ int sign;
+ v = mat_Dabs(x);
+ sign = (x >= 0)? 1: -1;
+ tau = 1 + 0.0705230784 * v + 0.0422820123 * v * v + 0.0092705272 * v * v * v +
+   0.0001520143 * v * v * v * v + 0.0002765672 * v * v * v * v * v +
+   0.0000430638 * v * v * v * v * v * v;
+ return (1 - 1 / (tau * tau * tau * tau * tau * tau * tau * tau * tau * tau * tau * tau * tau * tau * tau * tau)) * sign;
+}
+
+double gaussian_integral(double min, double max, double mean, double sigma)
+{
+  return erf((max - mean) / SQRT2 / sigma) / 2 - erf((min - mean) / SQRT2 / sigma) / 2;
 }

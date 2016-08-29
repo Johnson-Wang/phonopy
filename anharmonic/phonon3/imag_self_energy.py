@@ -212,32 +212,50 @@ class ImagSelfEnergy:
                                      self._cutoff_frequency)
 
     def set_integration_weights(self, scattering_event_class=None, is_triplet_symmetry=True):
-        if self._fpoints is None:
-            f_points = self._frequencies[self._grid_point][self._band_indices]
+        # if self._fpoints is None:
+        #     f_points = self._frequencies[self._grid_point][self._band_indices]
+        # else:
+        f_points = self._fpoints
+        num_band = self._frequencies.shape[-1]
+        if self._nu is not None:
+            self._g = np.zeros(
+                (3, len(self._grid_point_triplets), len(f_points), num_band, num_band),
+                dtype='double')
+            grid_addresses = self._interaction.get_grid_address()
+            triplets_sum = grid_addresses[self._grid_point_triplets].sum(axis=1)
+            is_normal_process = np.alltrue(triplets_sum == 0, axis=-1)
+            if self._nu == "N":
+                triplets = self._grid_point_triplets[np.where(is_normal_process)]
+                g_reduced = get_triplets_integration_weights(
+                    self._interaction,
+                    f_points,
+                    self._sigma,
+                    band_indices=self._band_indices,
+                    triplets=triplets,
+                    is_triplet_symmetry = is_triplet_symmetry)
+                self._g[:, np.where(is_normal_process)[0]] = g_reduced
+            elif self._nu == "U":
+                triplets = self._grid_point_triplets[np.where(is_normal_process == False)]
+                g_reduced = get_triplets_integration_weights(
+                    self._interaction,
+                    f_points,
+                    self._sigma,
+                    triplets=triplets,
+                    band_indices=self._band_indices,
+                    is_triplet_symmetry = is_triplet_symmetry)
+                self._g[:, np.where(is_normal_process == False)[0]] = g_reduced
         else:
-            f_points = self._fpoints
-
-        self._g = get_triplets_integration_weights(
-            self._interaction,
-            np.array(f_points, dtype='double'),
-            self._sigma,
-            is_triplet_symmetry = is_triplet_symmetry)
-
-        # self._g = np.where(self._g > 1e2, 0, self._g)
+            self._g = get_triplets_integration_weights(
+                self._interaction,
+                f_points,
+                self._sigma,
+                band_indices=self._band_indices,
+                is_triplet_symmetry = is_triplet_symmetry)
         if scattering_event_class == 1:
             self._g[0] = 0
         elif scattering_event_class == 2:
             self._g[1] = 0
             self._g[2] = 0
-
-        if self._nu is not None:
-            grid_addresses = self._interaction.get_grid_address()
-            triplets_sum = grid_addresses[self._grid_point_triplets].sum(axis=1)
-            is_normal_process = np.alltrue(triplets_sum == 0, axis=-1)
-            if self._nu == "N":
-                self._g[:, np.where(is_normal_process == False)] = 0
-            elif self._nu == "U":
-                self._g[:, np.where(is_normal_process)] = 0
 
     def run_interaction(self, scattering_class = None, is_triplets_dispersed=False, log_level=0):
         self.set_phonons(lang=self._lang)
@@ -247,10 +265,12 @@ class ImagSelfEnergy:
             g_skip = (np.abs(self._g[:, index]).sum(axis=0) < 1e-8)
         else:
             g_skip = (np.abs(self._g).sum(axis=0) < 1e-8)
-        # g_skip = None
         self._interaction.run(g_skip=g_skip,
                               lang=self._lang,
                               log_level=log_level)
+        # self._interaction._interaction_strength = np.ones(
+        #     (len(self._grid_point_triplets), len(self._band_indices), self._frequencies.shape[-1], self._frequencies.shape[-1]),
+        #     dtype='double')
         self._fc3_normal_squared = self._interaction.get_interaction_strength()
         mesh = self._interaction.get_mesh_numbers()
         num_grid = np.prod(mesh)

@@ -30,16 +30,13 @@ void  get_next_perturbation_at_all_bands(double *summation,
 					 const int num_triplet,
 					 const int num_band);
 
-void collision_degeneracy(double *scatt, 
-				const int *triplet_degeneracy, 
-				const int num_triplet, 
-				const int num_band);
-void collision_degeneracy_grid(double *scatt,
-				const int *degeneracy,
-				const int grid_point,
-				const int *grid_points2,
-				const int num_grid_points2,
-				const int num_band);
+void collision_degeneracy(double *collision, // shape: [ntriplet, 3, nband, nband] or [ntriplet, nband, nband]
+                        const int *degeneracy, // shape: [ngrids, nband]
+                        const int (*triplets)[3],
+                        const int num_triplet,
+                        const int num_band,
+                        const int is_permute);
+
 void get_interaction_from_reduced(double *interaction, 
 				  const double *interaction_all,
 				  const int *triplet_mapping,
@@ -57,10 +54,10 @@ void get_collision_from_reduced(double *scatt,
 
 void get_kappa_at_grid_point(double kappa[],
 			     Iarray* kpt_rotations_at_q,
-			     const double rec_lat[], 
+			     const double rec_lat[],
 			     const double gv[],
-			     const double heat_capacity[], 
-			     const double mfp[], 
+			     const double heat_capacity[],
+			     const double mfp[],
 			     const int deg[],
 			     const int num_band,
 			     const int num_temp);

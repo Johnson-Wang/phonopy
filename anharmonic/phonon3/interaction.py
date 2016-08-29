@@ -394,6 +394,7 @@ class Interaction:
                     self._frequencies[new] = (self._frequencies[new])[bo]
                     self._eigenvectors[new] = (self._eigenvectors[new].T)[bo].T
                 start = new
+
             else:
                 break
 
@@ -414,11 +415,6 @@ class Interaction:
                         self._degenerates[new, j] = self._degenerates[new, j - 1]
                     else:
                         self._degenerates[new, j] = j
-
-
-
-
-
 
         # for i in np.arange(2, nqpoint):
         #     deg = [np.where(self._degenerates[i] == j)[0] for j in np.unique(self._degenerates[i])]
@@ -795,8 +791,8 @@ class Interaction:
                             self._cutoff_delta)
         phono3c.interaction_degeneracy_grid(self._interaction_strength_reduced,
                                             self._degenerates,
-                                            self._triplets_at_q_reduced,
-                                            self._band_indices)
+                                            self._triplets_at_q_reduced.astype('intc').copy(),
+                                            self._band_indices.astype('intc'))
         # from itertools import permutations
         # interaction = np.zeros((6,) + self._interaction_strength_reduced.shape, dtype='double')
         # for i, permute in enumerate(permutations((0,1,2))):

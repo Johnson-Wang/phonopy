@@ -86,4 +86,5 @@ VecDBL * mat_alloc_VecDBL(const int size);
 void mat_free_VecDBL( VecDBL * vecdbl );
 int mat_is_int_matrix( SPGCONST double mat[3][3], double symprec );
 int mat_index_from_Iarray(const int *a, const int length, const int value);
+double gaussian_integral(double min, double max, double mean, double sigma);
 #endif

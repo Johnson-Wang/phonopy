@@ -170,8 +170,9 @@ def get_bz_grid_address(mesh, primitive_lattice, with_boundary=False, is_bz_map_
 
 @total_time.timeit
 def get_triplets_integration_weights(interaction,
-                                     frequency_points,
-                                     sigma_object,
+                                     frequency_points=None,
+                                     sigma_object=None,
+                                     band_indices=None,
                                      neighboring_phonons=True,
                                      triplets=None,
                                      lang='C',
@@ -181,7 +182,8 @@ def get_triplets_integration_weights(interaction,
         triplets = interaction.get_triplets_at_q()[0]
     frequencies = interaction.get_phonons()[0]
     num_band = frequencies.shape[1]
-    num_grids = frequencies.shape[0]
+    if frequency_points is None:
+        frequency_points = frequencies[triplets[0][0]][band_indices]
     g = np.zeros(
         (3, len(triplets), len(frequency_points), num_band, num_band),
         dtype='double')
@@ -232,6 +234,7 @@ def get_triplets_integration_weights(interaction,
                 frequency_points,
                 neighboring_phonons=neighboring_phonons,
                 triplets_at_q=triplets,
+                band_indices=band_indices,
                 is_triplet_symmetry=is_triplet_symmetry)
         else:
             _set_triplets_integration_weights_py(
@@ -241,13 +244,16 @@ def get_triplets_integration_weights(interaction,
 
 def _set_triplets_integration_weights_c(g,
                                         interaction,
-                                        frequency_points,
+                                        frequency_points = None,
                                         neighboring_phonons=True,
                                         triplets_at_q=None,
+                                        band_indices=None,
                                         is_triplet_symmetry=False):
     import anharmonic._phono3py as phono3c
     if triplets_at_q == None:
         triplets_at_q = interaction.get_triplets_at_q()[0]
+    if len(triplets_at_q) == 0:
+        return
     reciprocal_lattice = np.linalg.inv(interaction.get_primitive().get_cell())
     mesh = interaction.get_mesh_numbers()
     thm = TetrahedronMethod(reciprocal_lattice, mesh=mesh)
@@ -270,25 +276,58 @@ def _set_triplets_integration_weights_c(g,
             interaction.set_phonons(np.unique(neighboring_grid_points))
 
     frequencies = interaction.get_phonons()[0]
-    if not is_triplet_symmetry:
-        phono3c.triplets_integration_weights(
-            g,
-            frequency_points,
-            thm.get_tetrahedra().astype("intc").copy(),
-            mesh,
-            triplets_at_q,
-            frequencies,
-            grid_address,
-            bz_map)
-    else:
-        phono3c.triplets_integration_weights_sym(
-        g,
-        thm.get_tetrahedra().astype("intc").copy(),
-        mesh,
-        triplets_at_q,
-        frequencies,
-        grid_address,
-        bz_map)
+
+    if len(np.where(mesh == 1)[0]) < 2:
+        if band_indices is None:
+            phono3c.triplets_integration_weights_fpoints(
+                g,
+                frequency_points,
+                thm.get_tetrahedra().astype("intc").copy(),
+                mesh,
+                triplets_at_q,
+                frequencies,
+                grid_address,
+                bz_map)
+        else:
+            phono3c.triplets_integration_weights(
+                g,
+                thm.get_tetrahedra().astype("intc").copy(),
+                mesh,
+                triplets_at_q,
+                frequencies,
+                np.array(band_indices, dtype='intc'),
+                grid_address,
+                bz_map,
+                is_triplet_symmetry)
+    else: # 1D case
+        possible_shift = np.array((np.array(mesh) != 1), dtype='intc')
+        relative_address = np.array([[[0, 0, 0],
+                                      possible_shift],
+                                     [[0, 0, 0],
+                                      -possible_shift]], dtype="intc")
+        if band_indices is None:
+            phono3c.triplets_integration_weights_1D_fpoints(
+                g,
+                frequency_points,
+                relative_address,
+                mesh,
+                triplets_at_q,
+                frequencies,
+                grid_address,
+                bz_map)
+        else:
+            phono3c.triplets_integration_weights_1D(
+                g,
+                relative_address,
+                mesh,
+                triplets_at_q,
+                frequencies,
+                np.array(band_indices, dtype='intc'),
+                grid_address,
+                bz_map,
+                is_triplet_symmetry)
+
+
 
 
 def _set_triplets_integration_weights_py(g, interaction, frequency_points, triplets_at_q=None):

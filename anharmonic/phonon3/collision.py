@@ -24,6 +24,7 @@ class Collision():
                  is_group_velocity=False, # Use gv to determine smearing factor
                  write=False,
                  read=False,
+                 is_band_connection=False,
                  cutoff_frequency = 1e-4): #unit: THz
         self._pp = interaction
         self._sigmas = sigmas
@@ -36,6 +37,8 @@ class Collision():
             self._point_operations = self._pp.get_point_group_operations()
         self._kpoint_operations = self._pp._kpoint_operations
         self._is_dispersed=self._pp.get_is_dispersed()
+        if is_band_connection:
+            interaction.set_phonons_all(is_band_connection=is_band_connection)
         self._cutoff_frequency = cutoff_frequency
         self._grid_point = None
         self._grid_point_triplets = None
@@ -264,6 +267,7 @@ class Collision():
         if self._sigma is None:
             self._is_thm = True
 
+    @total_time.timeit
     def set_asigma(self, gamma_prev = None, gamma_pprev=None):
         if self._is_dispersed:
             if not self._read_col:
@@ -491,6 +495,7 @@ class Collision():
                     self._pp,
                     np.array(f_points, dtype='double'),
                     sigma_object,
+                    band_indices=self._band_indices,
                     triplets = self._grid_point_triplets,
                     is_triplet_symmetry=self._pp._symmetrize_fc3_q)
 
@@ -505,7 +510,9 @@ class Collision():
                     self._pp,
                     np.array(f_points, dtype='double'),
                     sigma_object,
-                    triplets = self._triplets_reduced)
+                    band_indices=self._band_indices,
+                    triplets = self._triplets_reduced,
+                    is_triplet_symmetry=self._pp._symmetrize_fc3_q)
             if self._pp.get_triplets_done().all(): #when the interaction strengths are all done
                 self._g_skip = None
             else:
@@ -529,11 +536,10 @@ class Collision():
                                   self._g.copy(),
                                   self._temperature,
                                   self._cutoff_frequency)
-                grid_points2 = self._grid_point_triplets[:, 1]
-                phono3c.collision_degeneracy_grid(self._collision_in,
-                                                  self._degeneracy_all.astype('intc').copy(),
-                                                  grid_points2.astype('intc').copy(),
-                                                  self._grid_point)
+                phono3c.collision_degeneracy(self._collision_in,
+                                             self._degeneracy_all.astype('intc'),
+                                             self._grid_point_triplets.astype("intc"),
+                                             False)
                 self._collision_in *= self._unit_conversion # unit in THz
         else:
             phono3c.collision_all_permute(self._collision_in_reduced,
@@ -544,7 +550,9 @@ class Collision():
                                           self._cutoff_frequency)
             self._collision_in_reduced *= self._unit_conversion # unit in THz
             phono3c.collision_degeneracy(self._collision_in_reduced,
-                                               np.intc(self._degeneracy_reduced).copy())
+                                         self._degeneracy_all.astype('intc'),
+                                         self._triplets_reduced.astype('intc').copy(),
+                                         True)
             self._collision_in_all[self._undone_uniq_index] = self._collision_in_reduced[:]
             self._collision_done[self._undone_uniq_index] = True
             phono3c.collision_from_reduced(self._collision_in,

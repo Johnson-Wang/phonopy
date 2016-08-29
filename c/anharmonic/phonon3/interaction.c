@@ -61,7 +61,12 @@ static void real_to_normal_sym_q(double *fc3_normal_squared,
 static int collect_undone_grid_points(int *undone,
 				      char *phonon_done,
 				      const Iarray *triplets);
-
+static void interaction_degeneracy_triplet(double *interaction,
+				const int *degeneracy,
+				const int triplet[3],
+				const int band_indices[],
+				const int num_band0,
+				const int num_band);
 void interaction_degeneracy_grid(double *interaction,
 				const int *degeneracy,
 				const int triplets_grid[][3],
@@ -70,103 +75,113 @@ void interaction_degeneracy_grid(double *interaction,
 				const int num_band0,
 				const int num_band)
 {
-  int i, j, k, l, m,n, ndeg;
-  double *interaction_temp = (double *) malloc(sizeof(double) * num_band * num_band);
-//  double (*deg)[3] = (double (*)[3]) malloc(sizeof(double) * num_band * 3);
-  int *deg[3];
-  //The frog jump algorithm for the degeneracy.
-//  #pragma omp parallel for private(i,k, l, m, ndeg, deg, scatt_temp)
+  int i;
+  #pragma omp parallel for
   for (i = 0; i < num_triplets; i++) // i: grid2 index
+    interaction_degeneracy_triplet(interaction + i * num_band0 * num_band * num_band,
+                                degeneracy,
+                                triplets_grid[i],
+                                band_indices,
+                                num_band0,
+                                num_band);
+
+}
+
+static void interaction_degeneracy_triplet(double *interaction,
+				const int *degeneracy,
+				const int triplet[3],
+				const int band_indices[],
+				const int num_band0,
+				const int num_band)
+{
+  //The frog jump algorithm for the degeneracy.
+  int i, j, k, l, ndeg, is_done;
+  double *interaction_temp = (double *) malloc(sizeof(double) * num_band * num_band);
+  int *deg[3], *deg_pos = (int*) malloc(sizeof(int) * num_band);
+  //i is the index for the position of the current frog
+  for (j = 0; j < 3; j++)
+    deg[j] = degeneracy + triplet[j] * num_band;
+  // for the band indices of the first phonon
+  //triplet0
+  for (i = 0; i < num_band0; i++)
   {
-   //k is the index for the position of the current frog
-    for (j = 0; j < 3; j++)
-      deg[j] = degeneracy + triplets_grid[i][j] * num_band;
-    // for the band indices of the first phonon
-    k = 0;
-
-    while(k < num_band0){
-      for (m = 0; m < num_band * num_band; m++)
-        interaction_temp[m] = 0.;
-      for (l = k; l < num_band0; l++){
-        if (deg[0][band_indices[l]] != deg[0][band_indices[k]])
-          break;
-      }
-      ndeg = l - k;
-      if (!ndeg) {
-        printf("Error! File %s line %d", __FILE__, __LINE__);
-        exit(1);
-      }
-      if (ndeg > 1)
+    ndeg = 0;
+    for (j = 0; j < num_band0; j++){
+      if (deg[0][band_indices[j]] == deg[0][band_indices[i]])
       {
-        for (l = k; l < k + ndeg; l++)
-          for (m = 0; m < num_band * num_band; m++)
-            interaction_temp[m] += interaction[i * num_band0 * num_band * num_band + l * num_band * num_band + m] / ndeg;
-        //assign the new value of scatt
-        for (l = k; l < k + ndeg; l++)
-          for (m = 0; m < num_band * num_band; m++)
-            interaction[i * num_band0 * num_band * num_band + l * num_band * num_band + m] = interaction_temp[m];
+        if (j < i)
+          break;
+        else
+          deg_pos[ndeg++] = j;
       }
-      k += ndeg;
     }
-
-    k = 0;
-    while(k<num_band)
-    {
-         //Initialization for scatt_temp
-      for (m = 0; m < num_band0 * num_band; m++)
-        interaction_temp[m] = 0;
-      // find the length of bands to skip and sum all the values in another vector
-      for (l = k; l < num_band; l++)
+    if (j < i) continue; // the current branch has been done previously. for the case e.g. deg={0, 1, 2, 1...}
+    if (ndeg > 1)
+      for (k = 0; k < num_band * num_band; k++)
       {
-        if (deg[1][l] != deg[1][k]) // the lth band and the kth band are degenerate
-          break;
-      }
-      ndeg = l - k; // number of degenerate state
-      //Take the average of the degenerate states
-
-      if (ndeg > 1){
-        for (l = k; l < k + ndeg; l++)
-          for (m = 0; m < num_band0; m++)
-            for (n = 0; n < num_band; n++)
-              interaction_temp[m * num_band + n] += interaction[i * num_band0 * num_band * num_band + m * num_band * num_band + l * num_band + n] / ndeg;
+        interaction_temp[k] = 0.;
+        for (j = 0; j < ndeg; j++)
+          interaction_temp[k] += interaction[deg_pos[j] * num_band * num_band + k] / ndeg;
         //assign the new value of scatt
-        for (l = k; l < k + ndeg; l++)
-          for (m = 0; m < num_band0; m++)
-            for (n = 0; n < num_band; n++)
-              interaction[i * num_band0 * num_band * num_band + m * num_band * num_band + l * num_band + n] = interaction_temp[m * num_band + n];
+        for (j = 0; j < ndeg; j++)
+          interaction[deg_pos[j] * num_band * num_band + k] = interaction_temp[k];
       }
-      k += ndeg;
-    }
-    k = 0;
-    while(k<num_band)
-    {
-         //Initialization for scatt_temp
-      for (m = 0; m < num_band0 * num_band; m++)
-        interaction_temp[m] = 0;
-      // find the length of bands to skip and sum all the values in another vector
-      for (l = k; l < num_band; l++)
+  }
+  //triplet1
+  for (i = 0; i < num_band; i++)
+  {
+    ndeg = 0;
+    for (j = 0; j < num_band; j++)
+      if (deg[1][j] == deg[1][i])
       {
-        if (deg[2][l] != deg[2][k]) // the lth band and the kth band are degenerate
+        if (j < i)
           break;
+        else
+          deg_pos[ndeg++] = j;
       }
-      ndeg = l - k; // number of degenerate state
-      //Take the average of the degenerate states
-      if (ndeg > 1){
-        for (l = k; l < k + ndeg; l++)
-          for (m = 0; m < num_band0; m++)
-            for (n = 0; n < num_band; n++)
-              interaction_temp[m * num_band + n] += interaction[i * num_band0 * num_band * num_band + m * num_band * num_band + n * num_band + l] / ndeg;
-        //assign the new value of scatt
-        for (l = k; l < k + ndeg; l++)
-          for (m = 0; m < num_band0; m++)
-            for (n = 0; n < num_band; n++)
-              interaction[i * num_band0 * num_band * num_band + m * num_band * num_band + n * num_band + l] = interaction_temp[m * num_band + n];
-      }
-      k += ndeg;
+    if (j < i) continue;
+    if (ndeg > 1)
+    {
+      for (k = 0; k < num_band0; k++) //triplet 0
+        for (l = 0; l < num_band; l++) //triplet 2
+        {
+          interaction_temp[k * num_band + l] = 0.;
+          for (j = 0; j < ndeg; j++)
+            interaction_temp[k * num_band + l] += interaction[k * num_band * num_band + deg_pos[j] * num_band + l] / ndeg;
+          for (j = 0; j < ndeg; j++)
+            interaction[k * num_band * num_band + deg_pos[j] * num_band + l] = interaction_temp[k * num_band + l];
+        }
     }
   }
+  //triplet2
+  for (i = 0; i < num_band; i++)
+  {
+    ndeg = 0;
+    for (j = 0; j < num_band; j++)
+      if (deg[2][j] == deg[2][i])
+      {
+        if (j < i)
+          break;
+        else
+          deg_pos[ndeg++] = j;
+      }
+    if (j < i) continue;
+    if (ndeg > 1)
+      for (k = 0; k < num_band0; k++)
+        for (l = 0; l < num_band; l++)
+        {
+          interaction_temp[k * num_band + l] = 0.;
+          for (j = 0; j < ndeg; j++)
+            interaction_temp[k * num_band + l] += interaction[k * num_band * num_band + l * num_band + deg_pos[j]] / ndeg;
+          for (j = 0; j < ndeg; j++)
+            interaction[k * num_band * num_band + l * num_band + deg_pos[j]] = interaction_temp[k * num_band + l];
+        }
+  }
   free(interaction_temp);
+  free(deg_pos);
 }
+
+
 
 void set_phonon_triplets(Darray *frequencies,
 			 Carray *eigenvectors,

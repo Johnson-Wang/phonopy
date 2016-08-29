@@ -418,7 +418,7 @@ get_integration_weight(const double omega,
   int i, j, ci;
   double sum, sum_temp, omega_temp = omega;
   double v[4];
-  double precesion=1e-5, diff;
+  double precesion=1e-4, diff;
   int is_delta;
   sum = 0;
   for (i = 0; i < 24; i++) {
@@ -428,12 +428,11 @@ get_integration_weight(const double omega,
     }
     ci = sort_omegas(v);
     is_delta = 0;
-//    if (v[3] - v[0] < precesion){
-//      is_delta = 1;
-//      diff = v[3] - v[0];
-//      if (omega_temp > v[3] && omega_temp - v[3] < diff) omega_temp -= diff;
-//      else if (omega_temp < v[0] && v[0] - omega_temp < diff) omega_temp += diff;
-//    }
+    if (v[3] - v[0] < precesion){
+      is_delta = 1;
+      sum_temp += gaussian((v[0] + v[1] + v[2] + v[3])/4 - omega_temp, precesion);
+    }
+    else {
     if (omega_temp < v[0]) {
       sum_temp += IJ(0, ci, omega_temp, v) * gn(0, omega_temp, v);
     } else {
@@ -453,6 +452,7 @@ get_integration_weight(const double omega,
 	}
       }
     }
+  }
   if (is_delta) sum+= sum_temp / 4.;
   else sum += sum_temp;
   }
@@ -1070,7 +1070,6 @@ static double _I_4(void)
 }
 
 
-
 //1D condition
 double thm_get_integration_weight_1D(const double omega,
 				  SPGCONST double tetrahedra_omegas[2][2],
@@ -1162,24 +1161,45 @@ get_integration_weight_1D(const double omega,
   int i, j, ci;
   double sum;
   double v[2];
-
+  double precision = 1e-4, part1, part2, part3, omega1, omega2, omega3;
   sum = 0;
   for (i = 0; i < 2; i++) {
     for (j = 0; j < 2; j++) {
       v[j] = tetrahedra_omegas[i][j];
     }
-
     ci = sort_omegas_1D(v);
-    if (omega < v[0]) {
-      sum += IJ(0, ci, omega, v) * gn(0, omega, v);
-    } else {
-      if (v[0] < omega && omega < v[1]) {
-	sum += IJ(1, ci, omega, v) * gn(1, omega, v);
+    if (mat_Dabs(omega - v[0]) < 6 * precision || mat_Dabs(omega - v[1]) < 6 * precision)
+    {
+      if (v[1] - v[0] < precision / 6)
+         sum += gaussian(tetrahedra_omegas[i][0] - omega, precision) / 2;
+      else
+      {
+        part1 = 0.5 + gaussian_integral(0, v[0], omega, precision); //probability for omega < v[0]
+        omega1 = v[0] - part1 * precision; // expected value of omega within {omega < v[0]}
+        part1 *= IJ(0, ci, omega1, v) * gn(0, omega1, v);
+        part2 = gaussian_integral(v[0], v[1], omega, precision); //probability for v[0] < omega < v[1]
+        omega2 = (mat_Dabs(omega - v[0]) < mat_Dabs(omega - v[1]))? v[0] + part2 * precision: v[1] - part2 * precision;
+        // expected value of omega within {v[0] < omega < v[1]}
+        part2 *= IJ(1, ci, omega2, v) * gn(1, omega2, v);
+        part3 = (0.5 - gaussian_integral(0, v[1], omega, precision)); //probability for omega > v[1]
+        omega3 = v[1] + part3 * precision; // expected value of omega within {omega > v[1]}
+        part3 *= IJ(2, ci, omega3, v) * gn(2, omega3, v);
+        sum += part1 + part2 + part3;
+      }
+    }
+    else
+    {
+      if (omega < v[0]) {
+        sum += IJ(0, ci, omega, v) * gn(0, omega, v);
       } else {
-	    if (v[1] < omega) {
-	      sum += IJ(2, ci, omega, v) * gn(2, omega, v);
+        if (v[0] < omega && omega < v[1]) {
+          sum += IJ(1, ci, omega, v) * gn(1, omega, v);
+        } else {
+	      if (v[1] < omega) {
+	        sum += IJ(2, ci, omega, v) * gn(2, omega, v);
+	      }
 	    }
-	  }
+      }
     }
   }
   return sum;
