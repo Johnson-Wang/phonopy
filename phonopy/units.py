@@ -86,8 +86,12 @@ class Timeit():
             return result
         return timed
 
-    def output(self):
+    def output(self, is_ignore_zero=True):
+        all_time = sum(self.time_dict.values())
         for key in self.time_dict.keys():
+            if is_ignore_zero and all_time != 0:
+                if not self.time_dict[key] / all_time > 0.01:
+                  continue
             print '%r %2.2f sec' % \
                   (key, self.time_dict[key])
 

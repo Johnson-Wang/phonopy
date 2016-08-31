@@ -21,68 +21,151 @@ void get_kappa_at_grid_point(double kappa[],
                  const int num_temp)
 {
   int i,j,k, l;
-  int m,remnant;
+  int m;
   double r[9], v[3], v2_tensor[6], v_temp[3];
-  double mfp_temp[num_temp * 3];
-  double vl_sum[num_temp * num_band*6]; // group_velocity * mfp
-  for (i=0;i<num_temp * num_band * 6;i++)
-    vl_sum[i]=0.0;
-  for (i=0;i<kpt_rotations_at_q->dims[0];i++) //number of rotations
+//  double vl_sum[num_temp * num_band*6]; // group_velocity * mfp
+  int num_deg, pos_deg[num_band];
+//  for (i=0;i<num_temp * num_band * 6;i++)
+//    vl_sum[i]=0.0;
+  for (i=0;i<kpt_rotations_at_q->dims[0];i++) //number of rotations i.e. weight
   {
     mat_copy_matrix_id3_flatten(r, kpt_rotations_at_q->data + i * 9); 
     mat_inverse_matrix_d3_flatten(r, r);
     mat_get_similar_matrix_d3_flatten(r, r, rec_lat);
-    //Considering degenerate group velocity of different branches
-    remnant = 0;
-
     for (j=0;j<num_band;j++)
     {
-      if (!(remnant--))
-      {
-    for (k=0; k<3; k++)
-    {
-      v[k]=0;
-      for (l=0; l<num_temp; l++)
-        mfp_temp[l*3+k]=0.;
-    }
-    for (m=0;m<num_band-j; m++)
-    {
-      if (deg[j+m] == j){
-        mat_multiply_matrix_vector_d3_flatten(v_temp, r, gv + (j + m) * 3);
-        mat_add_vector_d3_flatten(v, v, v_temp);
-        for (l=0; l<num_temp; l++)
-        {
-          mat_multiply_matrix_vector_d3_flatten(v_temp, r, mfp + l * num_band * 3 + (j + m) * 3);
-          mat_add_vector_d3_flatten(mfp_temp + l * 3, mfp_temp + l * 3, v_temp);
-        }
-      }
-      else
-        break;
-    }
-    remnant=m-1;
-    for (k=0; k<3; k++){
-      v[k] = v[k] / m;
-      for (l = 0; l < num_temp; l++)
-        mfp_temp[l * 3 + k] /= m;
-    }
-      }
+//      for (k=0; k<3; k++)
+//      {
+//        v[k]=0;
+//        for (l=0; l<num_temp; l++)
+//          mfp_temp[l*3+k]=0.;
+//      }
+      mat_multiply_matrix_vector_d3_flatten(v, r, gv + j * 3);
+//      mat_add_vector_d3_flatten(v, v, v_temp);
       for (l=0; l<num_temp; l++)
       {
-    mat_vector_outer_product_flatten(v2_tensor,v, mfp_temp + l * 3);
-    for (k=0; k<6;k++)
-      vl_sum[l * num_band * 6 + j * 6 + k] += v2_tensor[k];
+        mat_multiply_matrix_vector_d3_flatten(v_temp, r, mfp + l * num_band * 3 + j * 3);
+//        mat_add_vector_d3_flatten(mfp_temp + l * 3, mfp_temp + l * 3, v_temp);
+//      }
+//
+//      for (l=0; l<num_temp; l++)
+//      {
+        mat_vector_outer_product_flatten(v2_tensor,v, v_temp);
+        for (k=0; k<6;k++)
+          kappa[l * num_band * 6 + j * 6 + k] += v2_tensor[k] * heat_capacity[l * num_band + j];
       }
-    }
-  }
-  for (i=0; i<num_temp;i++)
-  {
-    for (j=0; j<num_band; j++)
-    {
-      for (k=0; k<6; k++)
-    kappa[i * num_band * 6 + j * 6 + k] = vl_sum[i * num_band * 6 + j * 6 + k] * heat_capacity[i * num_band + j];
     }
   }
 }
+//}
+//void get_kappa_at_grid_point(double kappa[],
+//                 Iarray* kpt_rotations_at_q, //rotations that can map the q* to other qpoints
+//                 const double rec_lat[],
+//                 const double gv[],
+//                 const double heat_capacity[],
+//                 const double mfp[], //dim[num_temp, num_band, 3]
+//                 const int deg[],
+//                 const int num_band,
+//                 const int num_temp)
+//{
+//  int i,j,k, l;
+//  int m,remnant;
+//  double r[9], v[3], v2_tensor[6], v_temp[3];
+//  double mfp_temp[num_temp * 3];
+////  double vl_sum[num_temp * num_band*6]; // group_velocity * mfp
+//  int num_deg, pos_deg[num_band];
+////  for (i=0;i<num_temp * num_band * 6;i++)
+////    vl_sum[i]=0.0;
+//  for (i=0;i<kpt_rotations_at_q->dims[0];i++) //number of rotations i.e. weight
+//  {
+//    mat_copy_matrix_id3_flatten(r, kpt_rotations_at_q->data + i * 9);
+//    mat_inverse_matrix_d3_flatten(r, r);
+//    mat_get_similar_matrix_d3_flatten(r, r, rec_lat);
+//    //Considering degenerate group velocity of different branches
+//
+//    for (j=0;j<num_band;j++)
+//    {
+//      num_deg = 0;
+//      for (m = 0; m < num_band; m++){
+//        if (deg[m] == deg[j]){
+//          if (m < j) break;
+//          pos_deg[num_deg++] = m;
+//        }
+//      }
+//      if (m < j) continue;
+//      for (k=0; k<3; k++)
+//      {
+//        v[k]=0;
+//        for (l=0; l<num_temp; l++)
+//          mfp_temp[l*3+k]=0.;
+//      }
+//      for (m = 0; m < num_deg; m++)
+//      {
+//        mat_multiply_matrix_vector_d3_flatten(v_temp, r, gv + pos_deg[m] * 3);
+//        mat_add_vector_d3_flatten(v, v, v_temp);
+//        for (l=0; l<num_temp; l++)
+//        {
+//          mat_multiply_matrix_vector_d3_flatten(v_temp, r, mfp + l * num_band * 3 + pos_deg[m] * 3);
+//          mat_add_vector_d3_flatten(mfp_temp + l * 3, mfp_temp + l * 3, v_temp);
+//        }
+//      }
+//      for (k=0; k<3; k++){
+//        v[k] = v[k] / num_deg;
+//        for (l = 0; l < num_temp; l++)
+//          mfp_temp[l * 3 + k] /= num_deg;
+//      }
+//
+//      for (l=0; l<num_temp; l++)
+//      {
+//        mat_vector_outer_product_flatten(v2_tensor,v, mfp_temp + l * 3);
+//        for (m = 0; m < num_deg; m++)
+//        {
+//          for (k=0; k<6;k++)
+//            kappa[i * num_band * 6 + pos_deg[m] * 6 + k] += v2_tensor[k] * heat_capacity[l * num_band + pos_deg[m]];
+//        }
+//      }
+//    }
+//  }
+//}
+//      if (!(remnant--))
+//      {
+//        for (k=0; k<3; k++)
+//        {
+//          v[k]=0;
+//          for (l=0; l<num_temp; l++)
+//            mfp_temp[l*3+k]=0.;
+//        }
+//        for (m=0;m<num_band-j; m++)
+//        {
+//          if (deg[j+m] == j){
+//            mat_multiply_matrix_vector_d3_flatten(v_temp, r, gv + (j + m) * 3);
+//            mat_add_vector_d3_flatten(v, v, v_temp);
+//            for (l=0; l<num_temp; l++)
+//            {
+//              mat_multiply_matrix_vector_d3_flatten(v_temp, r, mfp + l * num_band * 3 + (j + m) * 3);
+//              mat_add_vector_d3_flatten(mfp_temp + l * 3, mfp_temp + l * 3, v_temp);
+//            }
+//          }
+//          else
+//            break;
+//        }
+//        remnant=m-1;
+//        for (k=0; k<3; k++){
+//          v[k] = v[k] / m;
+//          for (l = 0; l < num_temp; l++)
+//            mfp_temp[l * 3 + k] /= m;
+//        }
+//      }
+
+//  for (i=0; i<num_temp;i++)
+//  {
+//    for (j=0; j<num_band; j++)
+//    {
+//      for (k=0; k<6; k++)
+//        kappa[i * num_band * 6 + j * 6 + k] = vl_sum[i * num_band * 6 + j * 6 + k] * heat_capacity[i * num_band + j];
+//    }
+//  }
+
 
 void  get_kappa(double kappa[],
         const double F[], //F (equivalent)
@@ -109,7 +192,7 @@ void  get_kappa(double kappa[],
     {
       if (index_mappings[j] == i)
       {
-    weight_at_q++;
+        weight_at_q++;
       }
     }
     kpt_rots_at_q->dims[0] = weight_at_q;
@@ -119,8 +202,8 @@ void  get_kappa(double kappa[],
     {
       if (index_mappings[j] == i)
       {
-    mat_copy_matrix_i3_flatten(kpt_rots_at_q->data + weight_at_q * 9, kpt_rotations + j * 9);
-    weight_at_q++;
+        mat_copy_matrix_i3_flatten(kpt_rots_at_q->data + weight_at_q * 9, kpt_rotations + j * 9);
+        weight_at_q++;
       }
     }
     get_kappa_at_grid_point(kappa + i * num_temp * num_band * 6,
@@ -317,9 +400,9 @@ void  get_collision_at_all_band_permute(double *collision, // actually collision
             (n0 * n1 * (n2 + 1) * g2  +
               n0 * (n1 + 1) * n2 * g1 +
               (n0 + 1) * n1 * n2 * g0);
-            collision[l*3*bb+2*bb+i*num_band+j] += W;
-            collision[l*3*bb+1*bb+k*num_band+i] += W ;
-            collision[l*3*bb+0*bb+j*num_band+k] += W;
+            collision[l*3*bb+2*bb+i*num_band+j] += W; //012 with summation over 2
+            collision[l*3*bb+1*bb+k*num_band+i] += W; //201 with summation over 1
+            collision[l*3*bb+0*bb+j*num_band+k] += W; //120 with summation over 0
         }
       }
     }
@@ -336,7 +419,7 @@ void collision_degeneracy(double *collision, // shape: [ntriplet, 3, nband, nban
   int i, j, k;
   const int nbb = num_band * num_band;
   int triplet[3];
-  const int sequence[3][3] = {{0, 1, 2}, {1, 2, 0}, {2, 0, 1}};
+  const int sequence[3][3] = {{1, 2, 0}, {2, 0, 1}, {0, 1, 2}}; // the third axis is the summation axis
   #pragma omp parallel for private(i, j, k, triplet)
   for (i = 0; i < num_triplet; i++) // i: triplet index
     if (is_permute)
@@ -371,8 +454,8 @@ static void collision_degeneracy_triplet(double *collision_triplet, // shape:[nt
   collision_temp = (double *) malloc(sizeof(double) * num_band);
   pos_deg = (int *) malloc(sizeof(int) * num_band);
   for (n = 0; n < 2; n++) // n accounts for the two phonons involved in each collision matrix
-  {
-    deg = degeneracy + triplet[n+1] * num_band; // phonon band degeneracy at the given grid_point
+  {//
+    deg = degeneracy + triplet[n] * num_band; // phonon band degeneracy at the given grid_point
     //i is the index for the position of the current frog
     for (i = 0; i < num_band; i++)
     {

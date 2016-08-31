@@ -19,7 +19,7 @@ class ImagSelfEnergy:
                  temperature=None,
                  sigma=None,
                  cutoff_lifetime=1e-4,  # inseconds
-                 is_band_connection=True,
+                 is_band_connection=False,
                  lang='C'):
         self._interaction = interaction
         if is_band_connection:

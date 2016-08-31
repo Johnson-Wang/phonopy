@@ -393,6 +393,7 @@ class Interaction:
                 if bo is not None:
                     self._frequencies[new] = (self._frequencies[new])[bo]
                     self._eigenvectors[new] = (self._eigenvectors[new].T)[bo].T
+                    # Since all the phonons here are non-degenerate, the step is missed
                 start = new
 
             else:
@@ -409,12 +410,17 @@ class Interaction:
             if bo is not None:
                 self._frequencies[new] = (self._frequencies[new])[bo]
                 self._eigenvectors[new] = (self._eigenvectors[new].T)[bo].T
-                degenerate_tmp = (self._degenerates[new])[bo].copy()
-                for j in range(1, nband):
-                    if degenerate_tmp[j] == degenerate_tmp[j-1]:
-                        self._degenerates[new, j] = self._degenerates[new, j - 1]
-                    else:
-                        self._degenerates[new, j] = j
+                self._degenerates[new] = (self._degenerates[new])[bo].copy()
+                # pos = 0
+                # for j in range(0, nband):
+                #     if degenerate_tmp[j] > j:
+                #         for k in range(0, j):
+                #             if degenerate_tmp[k] == degenerate_tmp[j]:
+                #
+                #     if degenerate_tmp[j] == degenerate_tmp[j-1]:
+                #         self._degenerates[new, j] = self._degenerates[new, j - 1]
+                #     else:
+                #         self._degenerates[new, j] = j
 
         # for i in np.arange(2, nqpoint):
         #     deg = [np.where(self._degenerates[i] == j)[0] for j in np.unique(self._degenerates[i])]

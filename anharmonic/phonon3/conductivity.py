@@ -37,6 +37,7 @@ class Conductivity:
                  no_kappa_stars=False,
                  gv_delta_q=None, # finite difference for group veolocity
                  log_level=0,
+                 is_band_connection=True,
                  write_tecplot=False):
         self._pp = interaction
         self._collision = None # has to be set derived class
@@ -51,13 +52,12 @@ class Conductivity:
         self._cutoff_frequency = self._pp.get_cutoff_frequency()
         self._boundary_mfp = boundary_mfp
         self._write_tecplot = write_tecplot
-        self._mesh = None
-        self._mesh_divisors = None
-        self._coarse_mesh = None
-        self._coarse_mesh_shifts = None
-        self._dim = 3
         self._set_mesh_numbers(mesh_divisors=mesh_divisors,
                                coarse_mesh_shifts=coarse_mesh_shifts)
+
+        if (np.array(self._mesh) == 1).sum() > 1:
+            if is_band_connection:
+                interaction.set_phonons_all(is_band_connection=is_band_connection)
         self._symmetry = symmetry
         self._bz_grid_address=None
         self._bz_to_pp_map = None
@@ -90,6 +90,7 @@ class Conductivity:
         self._read_gamma = False
         self._read_gamma_iso = False
         self._frequencies = None
+        self._eigen_vectors = None
         self._gv = None
         self._gamma_iso = None
         volume = self._primitive.get_volume()
@@ -245,6 +246,7 @@ class Conductivity:
         self._grid_point_count = 0
         self._pp.set_phonons(self._grid_points)
         self._frequencies = self._pp.get_phonons()[0][self._grid_points]
+        self._eigen_vectors = self._pp.get_phonons()[1][self._grid_points]
         self._degeneracies = self._pp.get_degeneracy()[self._grid_points]
         if self._write_tecplot:
             self._dim = np.count_nonzero(np.array(self._mesh)>1)
@@ -372,18 +374,20 @@ class Conductivity:
         
     def _set_gv(self, i):
         # Group velocity [num_freqs, 3]
-        gv  = self._get_gv(self._qpoints[i])
+        phonon = (self._frequencies[i], self._eigen_vectors[i], self._degeneracies[i])
+        gv  = self._get_gv(self._qpoints[i], phonon=phonon)
         self._gv[i] = gv
         # if self._degeneracies is not None:
         #     deg = self._degeneracies[i]
         #     self._gv[i] = get_degenerate_property(deg, gv)
 
-    def _get_gv(self, q):
+    def _get_gv(self, q, phonon=None):
         return get_group_velocity(
             q,
             self._dm,
             symmetry=self._symmetry,
             q_length=self._gv_delta_q,
+            phonon=phonon,
             frequency_factor_to_THz=self._frequency_factor_to_THz)
 
     def _get_main_diagonal(self, i, j, k):

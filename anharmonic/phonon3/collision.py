@@ -24,7 +24,6 @@ class Collision():
                  is_group_velocity=False, # Use gv to determine smearing factor
                  write=False,
                  read=False,
-                 is_band_connection=False,
                  cutoff_frequency = 1e-4): #unit: THz
         self._pp = interaction
         self._sigmas = sigmas
@@ -37,8 +36,6 @@ class Collision():
             self._point_operations = self._pp.get_point_group_operations()
         self._kpoint_operations = self._pp._kpoint_operations
         self._is_dispersed=self._pp.get_is_dispersed()
-        if is_band_connection:
-            interaction.set_phonons_all(is_band_connection=is_band_connection)
         self._cutoff_frequency = cutoff_frequency
         self._grid_point = None
         self._grid_point_triplets = None
@@ -61,7 +58,6 @@ class Collision():
         self._is_on_iteration = False
         self._asigma = None
         self._gamma_all=None
-        self._cutoff_frequency = cutoff_frequency
         self._irr_mapping_indices = None
         self._collision_in = None
         self._collision_out = None
@@ -369,7 +365,6 @@ class Collision():
         self._triplets_reduced = self._pp.get_triplets_at_q()[0][self._undone_triplet_index]
         assert (self._pp._phonon_done[self._triplets_reduced] == True).all()
         self._frequencies_reduced = self._frequencies_all[self._triplets_reduced]
-        self._degeneracy_reduced = self._degeneracy_all[self._triplets_reduced]
         # self.set_grid_points_occupation()
         self._occu_reduced = self._occupations_all[self._triplets_reduced, self._itemp]
 

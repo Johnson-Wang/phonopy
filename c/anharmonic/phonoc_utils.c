@@ -140,7 +140,7 @@ void get_undone_phonons(Darray *frequencies,
     get_phonon_degeneracy(degeneracies->data + num_band * gp,
 			  frequencies->data + num_band * gp,
 			  num_band,
-			  1e-4);			  
+			  1e-5);
   }
 }
 

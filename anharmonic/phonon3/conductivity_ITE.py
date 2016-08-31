@@ -225,7 +225,7 @@ class conductivity_ITE(Conductivity):
                             else:
                                 self._collision.set_asigma()
                         self._collision.set_integration_weights()
-                        self._collision.run_interaction_at_grid_point(self._collision._g_skip_reduced)
+                        self._collision.run_interaction_at_grid_point(self._collision.get_interaction_skip())
                         self._collision.run()
                         self.assign_perturbation_at_grid_point(s, g, t)
                         self.print_calculation_progress(g)
@@ -243,50 +243,6 @@ class conductivity_ITE(Conductivity):
         if self._collision.get_write_collision():
             self._collision.set_write_collision(False)
             self._collision.set_read_collision(True)
-
-    # def smrt(self): #single-mode relaxation time approximation
-    #     num_sigma = len(self._sigmas)
-    #     num_temp = len(self._temperatures)
-    #     num_grid = len(self._grid_points)
-    #     num_band = self._frequencies.shape[-1]
-    #     self._F= np.zeros((num_sigma, num_grid, num_temp, num_band, 3), dtype="double")
-    #     self._b = np.zeros((num_grid,num_temp,num_band,3), dtype="double")
-    #     self._kappa = np.zeros((num_sigma, num_grid, num_temp, num_band, 6), dtype="double")
-    #     self._gv = np.zeros((len(self._grid_points),
-    #                          num_band,
-    #                          3), dtype='double')
-    #     self._collision_out = np.zeros((num_sigma, num_grid, num_temp, num_band), dtype="double")
-    #     self._gamma = np.zeros((num_sigma, num_grid, num_temp, num_band), dtype="double")
-    #     for s in range(len(self._sigmas)):
-    #         self.set_sigma(s)
-    #         for t in range(len(self._temperatures)):
-    #             self.set_temperature(t)
-    #             self.set_collision()
-    #             if self._log_level:
-    #                 print "######Kappa calculation within SMRT at sigma=%s, t=%f#######"  %(self._sigma, self._temp)
-    #             self.print_calculation_progress_header()
-    #             for g, grid_point in enumerate(self._grid_points):
-    #                 self._collision.calculate_collision(grid_point=grid_point)
-    #                 n = self._collision.get_occupation()[grid_point, t]
-    #                 is_pass = self._frequencies[g] < self._cutoff_frequency
-    #                 collision_out = self._collision.get_collision_out()
-    #                 out_reverse=np.where(is_pass,0, 1/collision_out)
-    #                 freqs = self._frequencies[g]
-    #                 self._set_gv(g)
-    #                 nn1 = n * (n + 1)
-    #                 fnn1 = freqs * nn1
-    #                 self._b[g,t] = fnn1[:,np.newaxis] * self._gv[g] / self._temp ** 2
-    #                 self._F[s,g,t]= out_reverse[:,np.newaxis] * self._b[g,t]
-    #                 self._collision_out[s,g,t] = self._collision.get_collision_out()
-    #                 self._gamma[s,g,t] = self._collision.get_collision_out() * np.where(is_pass, 0, 1 / nn1) / 2.
-    #                 self.print_calculation_progress(g)
-    #         self.set_kappa_at_sigma(s)
-    #     print "Within SMRT, the thermal conductivities are recalculated to be (W/mK)"
-    #     self.print_kappa()
-    #     self._collision.write_collision_all(log_level=self._log_level)
-    #     if self._collision.get_write_collision():
-    #         self._collision.set_write_collision(False)
-    #         self._collision.set_read_collision(True)
 
     def print_calculation_progress_header(self):
         self._scale_bar = 0 # used for marking the calculation progress

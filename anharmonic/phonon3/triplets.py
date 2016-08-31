@@ -525,7 +525,7 @@ def get_point_group_reciprocal_at_grid(grid, mesh, kpoint_operations, no_sym=Fal
                 kpt_operation.append(rot)
     return np.array(kpt_operation, dtype=np.int)
 
-def get_kgp_index_at_grid(grid, mesh, kpoint_operations, no_sym=False, symprec=1e-5):
+def get_kgp_index_at_grid(grid, mesh, kpoint_operations, no_sym=False):
     kpt_operation = []
     if no_sym:
         kpt_operation.append(0)
@@ -533,7 +533,7 @@ def get_kgp_index_at_grid(grid, mesh, kpoint_operations, no_sym=False, symprec=1
         for i, rot in enumerate(kpoint_operations):
             diff = (np.dot(rot, grid) - grid) / np.double(mesh)
             diff -= np.rint(diff)
-            if (np.abs(np.divide(diff, mesh)) < symprec).all():
+            if (np.abs(diff) < np.divide(0.1, mesh)).all():
                 kpt_operation.append(i)
     assert len(kpt_operation) > 0
     assert len(kpoint_operations) % len(kpt_operation) == 0 # requirement for subgroup
