@@ -806,10 +806,6 @@ if settings.get_is_rotational_invariance():
 from phonopy.harmonic.force_constants import set_translational_rotational_invariance, show_drift_force_constants
 show_drift_force_constants(phonon.get_force_constants(), name='fc2')
 phonon.get_rotational_condition_of_fc()
-# force_constants = set_translational_rotational_invariance(phonon.get_force_constants(), phonon.get_supercell())
-# phonon.set_force_constants(force_constants)
-# show_drift_force_constants(phonon.get_force_constants(), name='fc2')
-# phonon.get_rotational_condition_of_fc()
 
 # Atomic mass modification
 primitive = phonon.get_primitive()

@@ -251,7 +251,7 @@ class conductivity_ITE_CG(Conductivity):
                                                                 np.intc(self._collision._triplet_weights).copy(),
                                                                 self._rot1_sums,
                                                                 rec_lat)
-                self._r_prev[s, i, t] = - AF_sum[:]
+                self._r_prev[s, i, t] = - AF_sum[:] # r = b - AF0 = - Ao . F0
                 if self._is_precondition:
                     #Here the preconditioning follows the algorithm in wiki/Conjugate_gradient_method
                     out = self._collision_out[s, i, t]
@@ -300,8 +300,9 @@ class conductivity_ITE_CG(Conductivity):
                                                         np.intc(self._irr_index_mapping).copy(),
                                                         np.intc(self._kpoint_operations[self._rot_mappings]),
                                                         np.double(np.linalg.inv(self._primitive.get_cell())).copy())
-        #Flexible preconditioned CG: r(i+1)-r(i) instead of r(i+1)
+        #Flexibly preconditioned CG: r(i+1)-r(i) instead of r(i+1)
         r = self._r[self._isigma,:,self._itemp] - self._r_prev[self._isigma,:,self._itemp]
+        # r = self._r[self._isigma,:,self._itemp]
         zr1 = np.zeros(3, dtype="double")
         phono3c.phonon_3_multiply_dvector_gb3_dvector_gb3(zr1,
                                                         self._z[self._isigma,:,self._itemp].copy(),
@@ -331,7 +332,6 @@ class conductivity_ITE_CG(Conductivity):
                 #calculating scattering rate
                 self.calculate_At_s_t_g(s, t, i) # sigma, temperature, grid
                 self.print_calculation_progress(i)
-            # self._collision.write_collision_all(log_level=self._log_level)
         import anharmonic._phono3py as phono3c
         gz = np.zeros(3, dtype="double")
         phono3c.phonon_3_multiply_dvector_gb3_dvector_gb3(gz,
@@ -357,7 +357,8 @@ class conductivity_ITE_CG(Conductivity):
         self.smrt()
         num_sigma = len(self._sigmas)
         num_temp = len(self._temperatures)
-        self._F0 = self._F
+        self._kappa0 = self._kappa.copy()
+        self._F0 = self._F.copy()
         self._F_prev = self._F0.copy()
         self._F = np.zeros_like(self._F0)
         self._is_converge=np.zeros((num_sigma, num_temp), dtype="bool")
@@ -373,7 +374,7 @@ class conductivity_ITE_CG(Conductivity):
         for s, sigma in enumerate(self._sigmas):
             for t, temp in enumerate(self._temperatures):
                 dkappa_max = np.abs(self.get_kappa_residual_at_s_t(s, t)).max()
-                kappa = self.get_kappa()[s, :, t]
+                kappa = self.get_kappa0()[s, :, t]
                 dkappa_max /= kappa.sum(axis=(0,1)).max()
                 print "Relative residual kappa for sigma=%s, T=%.2f K is %10.5e" % (sigma, temp, dkappa_max)
                 is_converge=(dkappa_max < self._diff_kappa)
@@ -428,7 +429,7 @@ class conductivity_ITE_CG(Conductivity):
         gv_norm=np.sum(self._gv**2, axis=-1)
         for j, t in enumerate(self._temperatures):
             FdotvT2 = 2 * np.sum(self._F[i,:,j] * self._gv, axis=-1) * t ** 2
-            self._gamma[i,:,j] = self._frequencies * gv_norm * np.where(np.abs(FdotvT2)==0, 0, 1 / FdotvT2)
+            self._gamma[i,:,j] = self._frequencies * gv_norm * np.where(np.abs(FdotvT2)>0, 1 / FdotvT2, 0)
 
     def set_kappa_at_sigma(self,s):
         self.set_kappa_at_s_c(s)
@@ -469,6 +470,5 @@ class conductivity_ITE_CG(Conductivity):
                                                              np.intc(self._irr_index_mapping).copy(),
                                                              np.intc(self._kpoint_operations[self._rot_mappings]).copy(),
                                                              rec_lat.copy())
-        # dkappa = np.sum(self._grid_weights[:, np.newaxis, np.newaxis] * np.abs(dkappa), axis=(0,1))
         dkappa = np.sum(np.abs(dkappa), axis=(0,1))
         return dkappa * self._temperatures[t] ** 2 * self._kappa_factor / np.prod(self._mesh)

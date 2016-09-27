@@ -118,13 +118,9 @@ class Collision():
             self._grid_point = self._grid_point_triplets[0, 0]
             self._grid_address = self._pp.get_grid_address()
             self._qpoint = self._grid_address[self._grid_point] / np.double(self._mesh)
-            if  self._pp._unique_triplets is not None:
-                self._inv_rot_sum = self._pp.get_2inv_rot_sum_at_grid()
-                self._kpg_at_q_index = self._pp.get_kpg_at_qs_index()
-            else:
-                kpg_index = get_kgp_index_at_grid(self._grid_address[grid_point], self._mesh, self._kpoint_operations)
-                self._inv_rot_sum = self._kpoint_operations[kpg_index].sum(axis=0)
-                self._kpg_at_q_index = kpg_index
+            kpg_index = get_kgp_index_at_grid(self._grid_address[grid_point], self._mesh, self._kpoint_operations)
+            self._inv_rot_sum = self._kpoint_operations[kpg_index].sum(axis=0)
+            self._kpg_at_q_index = kpg_index
 
             self._fc3_normal_squared = None
             if self._collision_iso is not None:
@@ -133,16 +129,15 @@ class Collision():
                 self._collision_iso.set_grid_point(grid_point, grid_points2=grid_points2, weights2=weights2)
 
 
-
     def set_pp_grid_points_all(self, grid_points):
         self._pp.set_grid_points(grid_points)
 
     def set_grids(self, grid_points):
         self._pp._grid_points = grid_points
         self._collision_done = None
+        if self._pp._unique_triplets == None:
+            self._pp.set_grid_points(grid_points)
         if not self._is_dispersed:
-            if self._pp._unique_triplets == None:
-                self._pp.set_grid_points(grid_points)
             bi = self._pp._band_indices
             nband = 3 * self._pp._primitive.get_number_of_atoms()
             luniq = len(self._pp._unique_triplets)

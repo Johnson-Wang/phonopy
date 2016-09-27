@@ -85,6 +85,7 @@ class Conductivity:
         self._ir_grid_weights = None
 
         self._kappa = None
+        self._kappa0 = None
         self._mode_kappa = None
         self._gamma = None
         self._read_gamma = False
@@ -171,6 +172,9 @@ class Conductivity:
         
     def get_kappa(self):
         return self._kappa
+
+    def get_kappa0(self):
+        return self._kappa0
 
     def get_mode_kappa(self):
         return self._mode_kappa

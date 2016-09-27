@@ -405,7 +405,7 @@ def get_equivalent_smallest_vectors(atom_number_supercell,
             relative_scale = np.dot(reduced_bases,
                                     np.linalg.inv(primitive_lattice))
             smallest_vectors.append(np.dot(differences[i], relative_scale))
-            
+
     return smallest_vectors
 
 

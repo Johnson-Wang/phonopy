@@ -139,7 +139,8 @@ class conductivity_ITE(Conductivity):
         self.smrt()
         num_sigma = len(self._sigmas)
         num_temp = len(self._temperatures)
-        self._F0 = self._F
+        self._F0 = self._F.copy()
+        self._kappa0 = self._kappa.copy()
         self._F_prev = self._F0.copy()
         self._F = np.zeros_like(self._F0)
         self._R = np.zeros_like(self._F0) # residual
@@ -155,7 +156,7 @@ class conductivity_ITE(Conductivity):
         for s, sigma in enumerate(self._sigmas):
             for t, temp in enumerate(self._temperatures):
                 dkappa_max = np.abs(self.get_kappa_residual_at_s_t(s, t)).max()
-                kappa = self.get_kappa()[s, :, t]
+                kappa = self.get_kappa0()[s, :, t]
                 dkappa_max /= kappa.sum(axis=(0,1)).max()
                 print "Relative residual kappa for sigma=%s, T=%.2f K is %10.5e" % (sigma, temp, dkappa_max)
                 is_converge=(dkappa_max < self._diff_kappa)

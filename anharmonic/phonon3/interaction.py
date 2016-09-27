@@ -411,29 +411,6 @@ class Interaction:
                 self._frequencies[new] = (self._frequencies[new])[bo]
                 self._eigenvectors[new] = (self._eigenvectors[new].T)[bo].T
                 self._degenerates[new] = (self._degenerates[new])[bo].copy()
-                # pos = 0
-                # for j in range(0, nband):
-                #     if degenerate_tmp[j] > j:
-                #         for k in range(0, j):
-                #             if degenerate_tmp[k] == degenerate_tmp[j]:
-                #
-                #     if degenerate_tmp[j] == degenerate_tmp[j-1]:
-                #         self._degenerates[new, j] = self._degenerates[new, j - 1]
-                #     else:
-                #         self._degenerates[new, j] = j
-
-        # for i in np.arange(2, nqpoint):
-        #     deg = [np.where(self._degenerates[i] == j)[0] for j in np.unique(self._degenerates[i])]
-        #     bo = estimate_band_connection(self._eigenvectors[i-1], self._eigenvectors[i], np.arange(nband), degenerate_sets=deg)
-        #     if bo is not None:
-        #         self._frequencies[i] = (self._frequencies[i])[bo]
-        #         self._eigenvectors[i] = (self._eigenvectors[i].T)[bo].T
-        #         degenerate_tmp = (self._degenerates[i])[bo].copy()
-        #         for j in range(1, nband):
-        #             if degenerate_tmp[j] == degenerate_tmp[j-1]:
-        #                 self._degenerates[i, j] = self._degenerates[i, j - 1]
-        #             else:
-        #                 self._degenerates[i, j] = j
 
     def get_interaction_strength(self):
         return self._interaction_strength
@@ -515,12 +492,6 @@ class Interaction:
     def get_cutoff_hfrequency(self):
         return self._cutoff_hfrequency
 
-    def get_2inv_rot_sum_at_grid(self):
-        return self._2inv_rot_sum[self._i]
-
-    def get_kpg_at_qs_index(self):
-        return self._kpg_at_qs_index[self._i]
-
     def get_triplets_mapping_at_grid(self):
         if not self._is_dispersed:
             return self._triplets_mappings[self._i]
@@ -543,7 +514,10 @@ class Interaction:
             self._triplets_at_q = self._triplets[self._i]
             self._weights_at_q = self._weights[self._i]
             self._triplets_address = self._grid_address[self._triplets_at_q]
-
+            if self._is_dispersed:
+                self._triplets_uniq_index_at_grid = self._unique_triplets[self._i]
+                self._triplets_maping_at_grid = self._triplets_mappings[self._i]
+                self._triplet_sequence_at_grid = self._triplets_sequence[self._i]
         else:
             reciprocal_lattice = np.linalg.inv(self._primitive.get_cell())
             if self._is_nosym:
@@ -586,7 +560,6 @@ class Interaction:
                     self._triplets_uniq_index_at_grid = unique_triplet_nums
                     self._triplets_maping_at_grid = triplets_mappings[0]
                     self._triplet_sequence_at_grid = triplet_sequence[0]
-
             sum_qs = bz_grid_address[triplets_at_q].sum(axis=1)
             resi = sum_qs % self._mesh
             if (resi != 0).any():
@@ -595,18 +568,6 @@ class Interaction:
                 print triplets
                 print sum_qs
                 print "============= Warning =================="
-            # for triplet in triplets_at_q:
-            #     sum_q = (bz_grid_address[triplet]).sum(axis=0)
-            #     if (sum_q % self._mesh != 0).any():
-            #         print "============= Warning =================="
-            #         print triplet
-            #         for tp in triplet:
-            #             print grid_address[tp],
-            #             print np.linalg.norm(
-            #                 np.dot(reciprocal_lattice,
-            #                        grid_address[tp] / self._mesh))
-            #         print sum_q
-            #         print "============= Warning =================="
 
             self._triplets_at_q = triplets_at_q
             self._weights_at_q = weights_at_q
@@ -615,87 +576,49 @@ class Interaction:
     def set_grid_points(self, grid_points):
         self._grid_points = grid_points
         reciprocal_lattice = np.linalg.inv(self._primitive.get_cell())
-        is_read_triplets = False
-        if self._is_nosym:
-            triplets_file = "triplets-m%d%d%d-nosym.hdf5" %tuple(self._mesh)
-        else:
-            triplets_file = "triplets-m%d%d%d.hdf5" %tuple(self._mesh)
-        # if self.is_nosym():
-        #     grid_mapping = np.arange(np.prod(self._mesh))
-        #     grid_mapping_rots = np.zeros(len(grid_mapping), dtype="intc")
-        # else:
-        #     grid_mapping, grid_mapping_rots = get_mappings(self._mesh,
-        #                                 self.get_point_group_operations(),
-        #                                 qpoints=np.array([0,0,0],dtype="double"))
-        # self._grid_mapping = grid_mapping
-        # self._grid_mapping_rot = grid_mapping_rots
-        if os.path.isfile(triplets_file):
-            is_read_triplets = True
-            try:
-                print "Automatically read triplets information from the file %s" %triplets_file
-                import h5py
-                suffix = "-m%d%d%d" % tuple(self._mesh)
-                if self._is_nosym:
-                    suffix += "-nosym"
-                self._triplets = []
-                self._weights = []
-                self._triplets_sequence = []
-                self._triplets_mappings = []
-                self._2inv_rot_sum = []
-                self._kpg_at_qs_index = []
-                f = h5py.File("triplets" + suffix + ".hdf5", 'r')
-                self._unique_triplets = f['unique'][:]
-                self._triplets_done = np.zeros(len(self._unique_triplets), dtype="byte")
-                triplets_mappings = f['mapping']
-                triplets_sequence = f['sequence']
-                rotsum = f['rotsum']
-                triplets = f['triplet']
-                weights = f['weight']
-                pgoi_at_q = f['pgoi_at_q']
-                for grid_point in grid_points:
-                    g = str(grid_point)
-                    self._triplets.append(triplets[g][:])
-                    self._weights.append(weights[g][:])
-                    self._triplets_mappings.append(triplets_mappings[g][:])
-                    self._triplets_sequence.append(triplets_sequence[g][:])
-                    self._2inv_rot_sum.append(rotsum[g][:])
-                    self._kpg_at_qs_index.append(pgoi_at_q[g][:])
-            except KeyError:
-                is_read_triplets = False
-                print "Reading triplets information from %s failed...\n Continuing by calculating the triplets again"%triplets_file
+        self._triplets = []
+        self._weights = []
+        second_mappings = []
+        self._triplets_sequence = []
+        crude_triplets = []
+        total_triplet_num = 0
+        # unique triplets at all grid points
+        self._unique_triplets = []
+        self._triplets_mappings = []
+        self._triplets_sequence = []
+        for g, grid_point in enumerate(grid_points):
+            (triples_at_q_crude,
+             weights_at_q,
+             grid_address,
+             grid_map)=\
+                get_triplets_at_q_crude(grid_point, self._mesh, self._point_group_operations)
 
-        if not is_read_triplets:
-            self._triplets = []
-            self._weights = []
-            second_mappings = []
-            pgoi_at_qs = []
-            self._triplets_sequence = []
-            inv_rot_sums = []
-            crude_triplets = []
-            total_triplet_num = 0
-            for g, grid_point in enumerate(grid_points):
-                (triples_at_q_crude,
-                 weights_at_q,
-                 grid_address,
-                 grid_map)=\
-                    get_triplets_at_q_crude(grid_point, self._mesh, self._point_group_operations)
+            (triplets_at_q,
+             weights,
+             bz_grid_address,
+             bz_map)=\
+                get_BZ_triplets_at_q(grid_point, self._mesh, reciprocal_lattice, grid_address, grid_map)
 
-                (triplets_at_q,
-                 weights,
-                 bz_grid_address,
-                 bz_map)=\
-                    get_BZ_triplets_at_q(grid_point, self._mesh, reciprocal_lattice, grid_address, grid_map)
+            crude_triplets.append(triples_at_q_crude)
+            self._triplets.append(triplets_at_q)
+            self._weights.append(weights_at_q)
+            total_triplet_num += len(triplets_at_q)
+            second_mappings.append(grid_map)
 
-                crude_triplets.append(triples_at_q_crude)
-                self._triplets.append(triplets_at_q)
-                self._weights.append(weights_at_q)
-                total_triplet_num += len(triplets_at_q)
-                pgoi_at_q = get_kgp_index_at_grid(grid_address[grid_point], self._mesh, self._kpoint_operations)
-                second_mappings.append(grid_map)
-                pgoi_at_qs.append(pgoi_at_q)
-                sec_rot_sum = self._kpoint_operations[pgoi_at_q].sum(axis=0)
-                inv_rot_sums.append(sec_rot_sum)
+            if self._is_dispersed:
+                (unique_triplet_nums_grid,
+                 triplets_mappings_grid,
+                 triplet_sequence_grid) = \
+                    reduce_triplets_by_permutation_symmetry([triples_at_q_crude],
+                                                            self._mesh,
+                                                            first_mapping=self._grid_mapping,
+                                                            first_rotation=self._kpoint_operations[self._grid_mapping_rot],
+                                                            second_mapping=np.array([grid_map]))
+                self._unique_triplets.append(unique_triplet_nums_grid)
+                self._triplets_mappings.append(triplets_mappings_grid[0])
+                self._triplets_sequence.append(triplet_sequence_grid[0])
 
+        if not self._is_dispersed:
             unique_triplet_num, triplets_mappings, triplet_sequence = reduce_triplets_by_permutation_symmetry(crude_triplets,
                                                     self._mesh,
                                                     first_mapping=self._grid_mapping,
@@ -703,26 +626,11 @@ class Interaction:
                                                     second_mapping=np.vstack(second_mappings))
 
             print "Number of total unique triplets after permutation symmetry: %d/ %d" %(len(unique_triplet_num), total_triplet_num)
-            # print "Number of total unique pairs after permutation symmetry: %d/%d" %(len(uniq_pairs_num), total_triplet_num)
-
             self._unique_triplets = np.vstack(self._triplets)[unique_triplet_num]
             self._triplets_done = np.zeros(len(unique_triplet_num), dtype="byte")
             self._triplets_mappings = triplets_mappings #map to the index of the triplets in the unique_triplet_num
             self._triplets_sequence = triplet_sequence
-            self._2inv_rot_sum = inv_rot_sums
-            self._kpg_at_qs_index = pgoi_at_qs
-            write_triplets_to_hdf5(self._mesh,
-                                grid_points,
-                                self._unique_triplets,
-                                self._triplets,
-                                self._weights,
-                                self._triplets_mappings,
-                                self._kpg_at_qs_index,
-                                self._2inv_rot_sum,
-                                self._triplets_sequence,
-                                is_nosym=self._is_nosym)
-        nband = 3 * self._primitive.get_number_of_atoms()
-        if not self._is_dispersed:
+            nband = 3 * self._primitive.get_number_of_atoms()
             try:
                 self._amplitude_all = np.zeros((len(self._unique_triplets), nband, nband, nband), dtype="double")
             except MemoryError:
@@ -731,7 +639,6 @@ class Interaction:
                 sys.exit(1)
         if self._is_read_amplitude:
             self.read_amplitude_all()
-
 
     def read_amplitude_all(self):
         if not self._is_dispersed:

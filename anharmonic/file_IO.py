@@ -1291,8 +1291,8 @@ def write_triplets_to_hdf5(mesh,
                            triplets,
                            weights,
                            mappings,
-                           pgoi_at_qs,
-                           second_rot_sums,
+                           # pgoi_at_qs,
+                           # second_rot_sums,
                            sequences,
                            is_nosym=False):
     suffix = "-m%d%d%d" % tuple(mesh)
@@ -1306,14 +1306,14 @@ def write_triplets_to_hdf5(mesh,
         weight = weights[i]
         mapping = mappings[i]
         sequence = sequences[i]
-        pgoi_at_q = pgoi_at_qs[i]
-        second_rot_sum = second_rot_sums[i]
+        # pgoi_at_q = pgoi_at_qs[i]
+        # second_rot_sum = second_rot_sums[i]
         w.create_dataset('/'.join(("triplet", str(g))), data=triplet)
         w.create_dataset('/'.join(("weight", str(g))),data=weight)
         w.create_dataset('/'.join(("mapping", str(g))),data=mapping)
-        w.create_dataset('/'.join(('rotsum', str(g))), data=second_rot_sum)
+        # w.create_dataset('/'.join(('rotsum', str(g))), data=second_rot_sum)
         w.create_dataset('/'.join(("sequence", str(g))),data=sequence)
-        w.create_dataset('/'.join(("pgoi_at_q", str(g))),data=pgoi_at_q)
+        # w.create_dataset('/'.join(("pgoi_at_q", str(g))),data=pgoi_at_q)
     w.close()
 
 @total_time.timeit
