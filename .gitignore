@@ -47,6 +47,7 @@ csetup.py
 csetup3.py
 cmake2
 cmake3
+*.py.txt
 
 #test
 scripts/dostest.py

@@ -420,7 +420,6 @@ class conductivity_ITE_CG(Conductivity):
                                                         np.double(rec_lat).copy())
         self._t_prev[isigma, igrid, itemp] = t_prev + out
 
-
     def set_kappa(self):
         for i,s in enumerate(self._sigmas):
             self.set_kappa_at_sigma(i)
