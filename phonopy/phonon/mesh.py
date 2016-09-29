@@ -191,7 +191,8 @@ class Mesh:
         self._eigenvalues = None
         self._eigenvectors = None
         self._set_eigenvalues()
-        self._set_band_connection()
+        if self._is_band_connection:
+            self._set_band_connection()
 
         self._group_velocities = None
         if group_velocity is not None:

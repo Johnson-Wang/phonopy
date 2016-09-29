@@ -248,10 +248,11 @@ class CollisionIso:
         #             ave2 = np.average(self._collision_in[:, :, deg_index2], axis=2)
         #             for bi1 in deg_index2:
         #                 self._collision_in[:, :, bi1] = ave2
-        phono3c.collision_degeneracy_grid(self._collision_in,
+        triplets_tmp = np.array([[self._grid_point, gp2, 0] for gp2 in self._grid_points2], dtype='intc')
+        phono3c.collision_degeneracy(self._collision_in,
                                           self._degeneracies.astype('intc').copy(),
-                                          self._grid_points2.astype('intc').copy(),
-                                          self._grid_point)
+                                          triplets_tmp,
+                                          False)
         self._collision_in *= np.pi / 2 / np.prod(self._mesh) # unit in THz
         self._collision_out = np.dot(weights, self._collision_in.sum(axis=-1))
         # conversion: (2 * pi) ** 2 / (2 * pi) / (2 * pi)
