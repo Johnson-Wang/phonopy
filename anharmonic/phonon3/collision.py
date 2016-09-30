@@ -433,18 +433,22 @@ class Collision():
             self._collision_in += self._collision_iso._collision_in
 
         if self._length is not None:
-            bnd_collision_unit = 100. / 1e-6 / THz / (2 * np.pi) # unit in THz, unit of length is micron
-            dm = self._pp.get_dynamical_matrix()
-            gv = get_group_velocity(self._qpoint,
-                                    dm,
-                                    symmetry=self._pp._symmetry,
-                                    q_length=self._gv_delta_q,
-                                    frequency_factor_to_THz=self._pp.get_frequency_factor_to_THz())
-            gv = np.sqrt(np.sum(gv ** 2, axis=-1))
-            n = self._occupations_all[self._grid_point, self._itemp]
-            cout_bnd = gv / self._length * n * (n + 1)
-            self._collision_out += cout_bnd * bnd_collision_unit
+            self._collision_out += self.get_boundary_scattering_strength()
         self.broadcast_collision_out()
+
+    @total_time.timeit
+    def get_boundary_scattering_strength(self):
+        bnd_collision_unit = 100. / 1e-6 / THz / (2 * np.pi) # unit in THz, unit of length is micron
+        dm = self._pp.get_dynamical_matrix()
+        gv = get_group_velocity(self._qpoint,
+                                dm,
+                                symmetry=self._pp._symmetry,
+                                q_length=self._gv_delta_q,
+                                frequency_factor_to_THz=self._pp.get_frequency_factor_to_THz())
+        gv = np.sqrt(np.sum(gv ** 2, axis=-1))
+        n = self._occupations_all[self._grid_point, self._itemp]
+        cout_bnd = gv / self._length * n * (n + 1)
+        return cout_bnd * bnd_collision_unit
 
     def run_py(self):
         for i, triplet in enumerate(self._grid_point_triplets):
@@ -591,7 +595,7 @@ class Collision():
             # nga = ng * self._fc3_normal_squared[tt, bb0, bb1] * self._unit_conversion
             # print
 
-
+    @total_time.timeit
     def calculate_collision(self,grid_point, sigma=None, temperature=None):
         "On behalf of the limited memory, each time only one temperature and one sigma is calculated"
         if sigma is not None:

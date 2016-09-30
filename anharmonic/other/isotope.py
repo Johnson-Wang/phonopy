@@ -7,7 +7,7 @@ from phonopy.structure.tetrahedron_method import TetrahedronMethod
 from phonopy.phonon.tetrahedron_mesh import get_tetrahedra_frequencies
 import phonopy.structure.spglib as spg
 from phonopy.structure.symmetry import Symmetry
-from phonopy.units import VaspToTHz
+from phonopy.units import VaspToTHz, total_time
 from phonopy.structure.atoms import isotope_data
 
 def get_mass_variances(primitive):
@@ -141,6 +141,7 @@ class CollisionIso:
         else:
             self._sigma = float(sigma)
 
+    @total_time.timeit
     def run(self, lang="C"):
         if lang=="C":
             self._run_c()

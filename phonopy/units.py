@@ -33,6 +33,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 import time
 from math import pi, sqrt
+from functools import wraps
 
 kb_J = 1.3806504e-23 # [J/K]
 PlanckConstant = 4.13566733e-15 # [eV s]
@@ -69,12 +70,13 @@ class Timeit():
     def __init__(self):
         self.time_dict = {}
         self._is_print_each = False
+        self._main = None
 
     def timeit(self, method):
-        name = method.__name__
+        name = '.'.join([method.__module__, method.__name__])
         if name not in self.time_dict.keys():
             self.time_dict[name] = 0.
-
+        @wraps(method)
         def timed(*args, **kw):
             ts = time.time()
             result = method(*args, **kw)
@@ -86,16 +88,32 @@ class Timeit():
             return result
         return timed
 
+    def set_main(self, method):
+        name = '.'.join([method.__module__, method.__name__])
+        def wrapper(*args, **kw):
+            self._main = name
+            return method(*args, **kw)
+        return wrapper
+
     def output(self, is_ignore_zero=True):
         all_time = sum(self.time_dict.values())
-        for key in self.time_dict.keys():
+        print "#################Time consumption of major functions#################"
+        if self._main is not None and self._main in self.time_dict.keys():
+                print 'Main function %r %2.2f sec' % \
+                      (self._main, self.time_dict[self._main])
+        keys = sorted(self.time_dict.keys(), key=lambda k: self.time_dict[k], reverse=True)
+        for key in keys:
             if is_ignore_zero and all_time != 0:
                 if not self.time_dict[key] / all_time > 0.01:
                   continue
-            print '%r %2.2f sec' % \
-                  (key, self.time_dict[key])
+            if key != self._main:
+                print '%r %5.2f sec' % \
+                      (key, self.time_dict[key])
+        print "#################Time consumption of major functions#################"
+        print
 
     def reset(self):
+        self._main = None
         for key in self.time_dict.keys():
             self.time_dict[key] = 0.
 

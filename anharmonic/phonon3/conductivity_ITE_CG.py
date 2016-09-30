@@ -98,11 +98,11 @@ class conductivity_ITE_CG(Conductivity):
         for i in range(len(self._sigmas)):
             self.set_sigma(i)
             for j in range(len(self._temperatures)):
+                total_time.reset()
                 self.set_temperature(j)
                 self.set_collision()
                 if self._ite_step == 0:
                     self.calculate_residual0_at_sigma_and_temp() # initialize the residual and the searching path
-                total_time.reset()
                 self.run_at_sigma_and_temp()
                 total_time.output()
         self.check_convergence()
@@ -131,6 +131,8 @@ class conductivity_ITE_CG(Conductivity):
         if self._is_read_col:
             self._pp.release_amplitude_all()
 
+    @total_time.set_main
+    @total_time.timeit
     def run_smrt_sigma_adaption(self):
         asigma_step = 0
         while asigma_step <= self._max_asigma_step:
@@ -211,6 +213,7 @@ class conductivity_ITE_CG(Conductivity):
         self._collision_out[isigma,igrid,itemp] = self._collision.get_collision_out()
         self._gamma[isigma,igrid,itemp] = self._collision.get_collision_out() * np.where(is_pass, 0, 1 / nn1) / 2.
 
+    @total_time.timeit
     def set_collision(self):
         self._collision.set_temperature(temperature=self._temp)
         self._collision.set_sigma(self._sigma)
@@ -225,7 +228,7 @@ class conductivity_ITE_CG(Conductivity):
             cv.append(self._get_cv(f))
         return np.array(cv, dtype="double")
 
-
+    @total_time.timeit
     def calculate_residual0_at_sigma_and_temp(self):
         t = self._itemp
         s = self._isigma
@@ -314,7 +317,8 @@ class conductivity_ITE_CG(Conductivity):
         self._p[self._isigma,:,self._itemp] = self._z[self._isigma,:,self._itemp] +\
                                               zr1_over_zr0 * self._p_prev[self._isigma,:,self._itemp]
 
-
+    @total_time.set_main
+    @total_time.timeit
     def run_at_sigma_and_temp(self): # sigma and temperature
         "Run each single iteration, all terminology follows the description in wiki/Conjugate_gradient_method"
         t = self._itemp
@@ -401,6 +405,7 @@ class conductivity_ITE_CG(Conductivity):
         a1 = self._kpoint_operations[r1dotr2_inv].sum(axis=0)
         self._rot1_sums = a1 / float(num_rots)
 
+    @total_time.timeit
     def calculate_At_s_t_g(self,isigma, itemp, igrid):
         self.get_total_rotation()
         import anharmonic._phono3py as phono3c
