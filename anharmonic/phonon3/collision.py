@@ -299,9 +299,10 @@ class Collision():
     def _set_group_velocity(self, grid_points):
         undone_grid_points = np.extract(self._gv_done_all[grid_points] == 0, grid_points)
         qpoints = [self._grid_address[gp] / np.double(self._mesh) for gp in undone_grid_points]
-        self._group_velocity.set_q_points(q_points=qpoints)
-        self._gv_all[undone_grid_points] = self._group_velocity.get_group_velocity()
-        self._gv_done_all[undone_grid_points] = True
+        if len(qpoints) != 0:
+            self._group_velocity.set_q_points(q_points=qpoints)
+            self._gv_all[undone_grid_points] = self._group_velocity.get_group_velocity()
+            self._gv_done_all[undone_grid_points] = True
 
     def set_write_collision(self, is_write_col):
         self._write_col = is_write_col
@@ -440,17 +441,18 @@ class Collision():
     @total_time.timeit
     def get_boundary_scattering_strength(self):
         self._set_group_velocity(grid_points=[self._grid_point])
-
         bnd_collision_unit = 100. / 1e-6 / THz / (2 * np.pi) # unit in THz, unit of length is micron
-        # dm = self._pp.get_dynamical_matrix()
-        # gv = get_group_velocity(self._qpoint,
-        #                         dm,
-        #                         symmetry=self._pp._symmetry,
-        #                         q_length=self._gv_delta_q,
-        #                         frequency_factor_to_THz=self._pp.get_frequency_factor_to_THz())
-        gv = np.sqrt(np.sum(self._gv_all[self._grid_point] ** 2, axis=-1))
+        gv = self._gv_all[self._grid_point]
+        dm = self._pp.get_dynamical_matrix()
+        gv1 = get_group_velocity(self._qpoint,
+                                dm,
+                                symmetry=self._pp._symmetry,
+                                q_length=self._gv_delta_q,
+                                frequency_factor_to_THz=self._pp.get_frequency_factor_to_THz())
+
+        gv_average = np.sqrt(np.sum(gv ** 2, axis=-1))
         n = self._occupations_all[self._grid_point, self._itemp]
-        cout_bnd = gv / self._length * n * (n + 1)
+        cout_bnd = gv_average / self._length * n * (n + 1)
         return cout_bnd * bnd_collision_unit
 
     def run_py(self):
