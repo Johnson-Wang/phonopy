@@ -155,6 +155,8 @@ class GroupVelocity:
 
     def _set_group_velocity(self, phonons=None):
         v_g = []
+        if phonons is None:
+            phonons = [None for q in self._q_points]
         for i, q in enumerate(self._q_points):
             dD_at_q = self._set_group_velocity_at_q(q, phonon=phonons[i])
             v_g.append(dD_at_q)

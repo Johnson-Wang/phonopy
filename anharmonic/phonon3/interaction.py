@@ -136,7 +136,6 @@ class Interaction:
                  symmetrize_fc3_q=False,
                  symprec=1e-3,
                  atom_triplet_cut = None,
-                 cutoff_fc3q = None,
                  cutoff_frequency=None,
                  cutoff_hfrequency=None,
                  cutoff_delta = None,
@@ -163,7 +162,6 @@ class Interaction:
             self._atom_triplet_cut=np.zeros((natom_super, natom_super, natom_super), dtype=bool)
         else:
             self._atom_triplet_cut=atom_triplet_cut
-        self._cut_fc3q = cutoff_fc3q
         if cutoff_delta is None:
             self._cutoff_delta = 1000.0
         else:
@@ -681,7 +679,6 @@ class Interaction:
         p2s = np.intc(self._primitive.get_primitive_to_supercell_map())
         s2p = np.intc(self._primitive.get_supercell_to_primitive_map())
         atc=np.intc(self._atom_triplet_cut) # int type
-        atc_rec = np.intc(self._cut_fc3q) # intc type
         phono3c.interaction(self._interaction_strength_reduced,
                             self._frequencies,
                             self._eigenvectors,
@@ -690,7 +687,6 @@ class Interaction:
                             self._mesh,
                             self._fc3,
                             atc,
-                            atc_rec,
                             g_skip,
                             svecs,
                             multiplicity,

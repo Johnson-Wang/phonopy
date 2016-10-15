@@ -24,7 +24,6 @@ void real_to_reciprocal(lapack_complex_double *fc3_reciprocal,
 			const double q[9],
 			const Darray *fc3,
 			const int *atc,
-                        const int *atc_rec,
 			const Darray *shortest_vectors,
 			const Iarray *multiplicity,
 			const int *p2s_map,
@@ -38,12 +37,6 @@ void real_to_reciprocal(lapack_complex_double *fc3_reciprocal,
   for (i = 0; i < num_patom; i++) {
     for (j = 0; j < num_patom; j++) {
       for (k = 0; k < num_patom; k++) {
-        if (atc_rec[i*num_patom*num_patom + j*num_patom + k]){
-          for (l=0; l<27; l++){
-            fc3_reciprocal[i*27 * num_patom * num_patom +j * 27 * num_patom +k * 27 +l] =
-                        lapack_make_complex_double(0, 0);
-          }
-          continue;}
 	real_to_reciprocal_elements(fc3_reciprocal +
 				    i * 27 * num_patom * num_patom +
 				    j * 27 * num_patom +

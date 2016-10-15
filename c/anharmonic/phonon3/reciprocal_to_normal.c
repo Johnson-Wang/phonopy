@@ -11,7 +11,6 @@ static double fc3_sum_squared(const int bi0,
 			      const lapack_complex_double *eigvecs1,
 			      const lapack_complex_double *eigvecs2,
 			      const lapack_complex_double *fc3_reciprocal,
-                              const int *atc_rec,
 			      const double *masses,
 			      const int num_atom);
 void reciprocal_to_normal(double *fc3_normal_squared,
@@ -27,7 +26,6 @@ void reciprocal_to_normal(double *fc3_normal_squared,
 			  const int num_band0,
 			  const int num_band,
 			  const int pos_band0,
-              const int *atc_rec, //inter-atomic triplets cut in the reciprocal force constants
               const char *g_skip,
 			  const double cutoff_frequency,
 			  const double cutoff_hfrequency,
@@ -63,7 +61,6 @@ void reciprocal_to_normal(double *fc3_normal_squared,
                 fc3_sum_squared(bi, bj, bk,
                         eigvecs0, eigvecs1, eigvecs2,
                         fc3_reciprocal,
-                        atc_rec,
                         masses,
                         num_atom) / fff;
             }
@@ -81,7 +78,6 @@ static double fc3_sum_squared(const int bi0,
 			      const lapack_complex_double *eigvecs1,
 			      const lapack_complex_double *eigvecs2,
 			      const lapack_complex_double *fc3_reciprocal,
-                  const int *atc_rec,
 			      const double *masses,
 			      const int num_atom)
 {
@@ -94,9 +90,6 @@ static double fc3_sum_squared(const int bi0,
   for (i = 0; i < num_atom; i++) {
     for (j = 0; j < num_atom; j++) {
       for (k = 0; k < num_atom; k++) {
-        if (atc_rec[i*num_atom*num_atom+j*num_atom+k]){
-          continue;
-        }
 	sum_real_cart = 0;
 	sum_imag_cart = 0;
 	mmm = sqrt(masses[i] * masses[j] * masses[k]);

@@ -19,7 +19,7 @@ from phonopy.units import total_time
 def write_supercells_with_displacements(supercell,
                                         double_displacements,
                                         amplitude=None,
-                                        cutoff_distance=None,
+                                        cutoff_radius=None,
                                         filename='disp_fc3.yaml'):
     if amplitude==None:
         distance = 0.01
@@ -30,9 +30,10 @@ def write_supercells_with_displacements(supercell,
     w = open(filename, 'w')
     w.write("natom: %d\n" %  supercell.get_number_of_atoms())
     w.write("num_first_displacements: %d\n" %  num_first)
-    if cutoff_distance is not None:
-        cutoff_distance = cutoff_distance.flatten()
-        w.write("cutoff_distance:  " +"%7.4f"*len(cutoff_distance)%tuple(cutoff_distance) + "\n")
+    if cutoff_radius is not None:
+        w.write("cutoff_radius:\n")
+        for key in cutoff_radius.keys():
+            w.write("  %s: %5.2f\n"%(key, cutoff_radius[key]))
     num_second = 0
     for d1 in double_displacements['first_atoms']:
         num_second += len(d1['second_atoms'])
@@ -1682,10 +1683,10 @@ def parse_disp_fc3_yaml(filename="disp_fc3.yaml"):
     natom = dataset['natom']
     new_dataset = {}
     new_dataset['natom'] = natom
+    if 'cutoff_radius' in dataset:
+        new_dataset['cutoff_radius'] = dataset['cutoff_radius']
     new_first_atoms = []
     for first_atoms in dataset['first_atoms']:
-        if 'cutoff_distance' in dataset:
-            new_dataset['cutoff_distance'] = dataset['cutoff_distance']
         first_atoms['number'] -= 1
         atom1 = first_atoms['number']
         disp1 = first_atoms['displacement']

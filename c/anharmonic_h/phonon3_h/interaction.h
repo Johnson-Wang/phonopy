@@ -38,7 +38,6 @@ void get_interaction(Darray *fc3_normal_squared,
 		     const int *mesh,
 		     const Darray *fc3,
 		     const int *atc,
-             const int *atc_rec,
              const char* g_skip,
 		     const Darray *shortest_vectors,
 		     const Iarray *multiplicity,
@@ -49,5 +48,5 @@ void get_interaction(Darray *fc3_normal_squared,
 		     const int is_sym_q,
 		     const double cutoff_frequency,
 		     const double cutoff_hfrequency,
-                     const double cutoff_delta);
+             const double cutoff_delta);
 #endif

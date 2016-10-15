@@ -74,7 +74,7 @@ class Collision():
         self._init_grids_properties()
         self._length = length
         self._gv_delta_q = gv_delta_q
-        if is_group_velocity:
+        if is_group_velocity or self._length is not None:
             self._init_group_velocity()
         if mass_variances is not None:
             self._collision_iso = \
@@ -282,7 +282,7 @@ class Collision():
                                       gt[:,1, np.newaxis, :, np.newaxis] +
                                       gt[:,2, np.newaxis, np.newaxis, :])
         elif self._is_group_velocity:
-            self._set_group_velocity(qpoints=np.unique(triplets))
+            self._set_group_velocity(grid_points=np.unique(triplets))
             triplet1, triplet2 = triplets[:, 1], triplets[:,2]
             gv1, gv2 = self._gv_all[triplet1], self._gv_all[triplet2]
             reciprocal_lattice = np.linalg.inv(self._pp._primitive.get_cell())
@@ -296,9 +296,11 @@ class Collision():
                 nband = self._pp._primitive.get_number_of_atoms() * 3
                 self._asigma = np.zeros((0,nband, nband, nband), dtype="double")
 
-    def _set_group_velocity(self, qpoints):
-        undone_grid_points = np.extract(self._gv_done_all[qpoints]==0, qpoints)
-        self._group_velocity.set_q_points(q_points=undone_grid_points)
+    def _set_group_velocity(self, grid_points):
+        undone_grid_points = np.extract(self._gv_done_all[grid_points] == 0, grid_points)
+        qpoints = [self._grid_address[gp] / np.double(self._mesh) for gp in undone_grid_points]
+        self._group_velocity.set_q_points(q_points=qpoints)
+        self._gv_all[undone_grid_points] = self._group_velocity.get_group_velocity()
         self._gv_done_all[undone_grid_points] = True
 
     def set_write_collision(self, is_write_col):
@@ -431,21 +433,22 @@ class Collision():
             self._collision_iso.run()
             self._collision_out += self._collision_iso._collision_out
             self._collision_in += self._collision_iso._collision_in
-
         if self._length is not None:
             self._collision_out += self.get_boundary_scattering_strength()
         self.broadcast_collision_out()
 
     @total_time.timeit
     def get_boundary_scattering_strength(self):
+        self._set_group_velocity(grid_points=[self._grid_point])
+
         bnd_collision_unit = 100. / 1e-6 / THz / (2 * np.pi) # unit in THz, unit of length is micron
-        dm = self._pp.get_dynamical_matrix()
-        gv = get_group_velocity(self._qpoint,
-                                dm,
-                                symmetry=self._pp._symmetry,
-                                q_length=self._gv_delta_q,
-                                frequency_factor_to_THz=self._pp.get_frequency_factor_to_THz())
-        gv = np.sqrt(np.sum(gv ** 2, axis=-1))
+        # dm = self._pp.get_dynamical_matrix()
+        # gv = get_group_velocity(self._qpoint,
+        #                         dm,
+        #                         symmetry=self._pp._symmetry,
+        #                         q_length=self._gv_delta_q,
+        #                         frequency_factor_to_THz=self._pp.get_frequency_factor_to_THz())
+        gv = np.sqrt(np.sum(self._gv_all[self._grid_point] ** 2, axis=-1))
         n = self._occupations_all[self._grid_point, self._itemp]
         cout_bnd = gv / self._length * n * (n + 1)
         return cout_bnd * bnd_collision_unit

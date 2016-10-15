@@ -6,13 +6,14 @@ from phonopy.harmonic.dynamical_matrix import get_equivalent_smallest_vectors
 def direction_to_displacement(dataset,
                               distance=0.03,
                               supercell=None,
-                              cutoff_pair_distance=None):
+                              cr=None):
     lattice = supercell.get_cell()
     new_dataset = {}
     new_dataset['natom'] = supercell.get_number_of_atoms()
-    if cutoff_pair_distance is not None:
-        new_dataset['cutoff_distance'] = cutoff_pair_distance
+    if cr is not None:
+        new_dataset['cutoff_distance'] = cr
     new_first_atoms = []
+    symbols = supercell.get_chemical_symbols()
     for first_atoms in dataset:
         atom1 = first_atoms['number']
         direction1 = first_atoms['direction']
@@ -22,12 +23,13 @@ def direction_to_displacement(dataset,
         for second_atom in first_atoms['second_atoms']:
             atom2 = second_atom['number']
             pair_distance = second_atom['distance']
-            included = (cutoff_pair_distance is None or
-                        pair_distance < cutoff_pair_distance[atom1, atom2])
+            included = (cr is None or
+                        pair_distance < cr[symbols[atom1]] + cr[symbols[atom2]])
+
             for direction2 in second_atom['directions']:
                 disp_cart2 = np.dot(direction2, lattice)
                 disp_cart2 *= distance / np.linalg.norm(disp_cart2)
-                if cutoff_pair_distance is None:
+                if cr is None:
                     new_second_atoms.append({'number': atom2,
                                              'direction': direction2,
                                              'displacement': disp_cart2,

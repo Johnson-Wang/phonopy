@@ -118,9 +118,8 @@ parser.set_defaults(amplitude=None,
                     band_paths=None,
                     band_points=None,
                     cell_poscar=None,
-                    cutoff_pair_distance=None,
+                    cutoff_radius=None,
                     cutoff_delta=None,
-                    cutoff_triplet=None,
                     cutoff_frequency=1e-4,
                     cutoff_hfrequency=None, # frequency higher than this cutoff is not considered
                     cutoff_lifetime=1e-4,
@@ -226,15 +225,6 @@ parser.add_option("-c", "--cell", dest="cell_poscar",
 parser.add_option("--cutr", dest="cutoff_radius",
                   type="string",
                   help="Cutoff radius for atoms (format: 1 2 3 4 ...) (self-interacting cutoff distance instead of radius)")
-parser.add_option("--cutp", "--cutoff_pair",
-                  dest="cutoff_pair", type="string",
-                  help="""Cutoff distance between pairs (format: 1-1 1-2 1-3 ... 2-2 2-3 ... 3-3 ...)
-                  of displaced atoms used for supercell creation with displacements and making third-order force constants""")
-parser.add_option("--cutt", "--cutoff_triplet",
-                  dest="cutoff_triplet",
-                  type="string",
-                  help="""Cutoff distance of third-order force constants. (format: 1-1-1 1-1-2 1-1-3 ... 1-2-2 1-2-2 1-2-3... )
-                       Elements where any pair of atoms has larger distance than cut-off distance are set zero.""")
 parser.add_option("--cutd","--cutoff_delta", dest="cutoff_delta",
                   type="float",
                   help="""Cutoff value (should be lager than 3* sigma) for gaussian smearing.
@@ -537,26 +527,19 @@ if log_level:
         print "FC3 symmetry of index exchange in real space:", options.is_symmetrize_fc3_r
     if options.is_symmetrize_fc3_q:
         print "FC3 symmetry of index exchange in reciprocal space:", options.is_symmetrize_fc3_q
-    if settings.get_cutoff_radius() is not None:
-        print "Cutoff radius:"
-        print settings.get_cutoff_radius()
-    if settings.get_cutoff_pair() is not None:
-        print "Cutoff pair distance:"
-        print settings.get_cutoff_pair()
-    if settings.get_cutoff_triplet() is not None:
-        print "FC3 cutoff distance:",
-        print settings.get_cutoff_triplet()
     if not options.supercell_dimension_extra == None:
         print "Extra supercell for fc2 is supplied."
     if settings.get_is_nac():
         print "Non-analytical term correction:", settings.get_is_nac()
     print "Spacegroup: ", symmetry.get_international_table()
 
-specie, sequence = np.unique(unitcell.get_atomic_numbers(), return_index=True)
-cutoff = Cutoff(specie[np.argsort(sequence)],
-                settings.get_cutoff_radius(),
-                settings.get_cutoff_pair(),
-                settings.get_cutoff_triplet())
+species = []
+for symbol in unitcell.get_chemical_symbols():
+    if symbol not in species:
+        species.append(symbol)
+
+cutoff = Cutoff(species,
+                settings.get_cutoff_radius())
 
 
 if options.is_displacement:
@@ -593,9 +576,8 @@ else:
 # Create supercells with displacements and exit (pre-process) #
 ###############################################################
 if run_mode == "displacements":
-    cutoff_pair_distance = cutoff.get_cutoff_pair()
     cutoff.set_cell(supercell, symprec = symmetry.get_symmetry_tolerance())
-    cutpair_super = cutoff.expand_pair()
+    cutoff_radius = cutoff.get_cutoff_radius()
     displacement_dataset = get_third_order_displacements(supercell,
                                                          symmetry,
                                                          is_plusminus=settings.get_is_plusminus_displacement(),
@@ -603,23 +585,17 @@ if run_mode == "displacements":
     dds = direction_to_displacement(displacement_dataset,
                                     settings.get_displacement_distance(),
                                     supercell,
-                                    cutoff_pair_distance=cutpair_super)
+                                    cr=cutoff_radius)
 
     num_disps, num_disp_files = write_supercells_with_displacements(supercell,
                                                                     dds,
                                                                     amplitude=settings.get_displacement_distance(),
-                                                                    cutoff_distance=cutoff_pair_distance)
+                                                                    cutoff_radius=cutoff.get_cutoff_radius())
     if log_level:
         print "Total number of displacements:", num_disps
-        if cutoff_pair_distance is not None:
-            # print "Cutoff distance for displacements:",
-            # for at, dist in zip(unique_atom_symbols, cutoff_pair_distance):
-            #     print at, ":", dist,";",
-            # print
+        if cutoff_radius is not None:
             print "Number of displacement supercell files created:",
             print  num_disp_files
-    if log_level:
-        print "FORCES_FC3 has been created."
         print_end()
     exit(0)
 
@@ -828,7 +804,7 @@ else:
             parse_DELTA_FC2_SETS(disp_dataset)
         else:
             parse_DELTA_FORCES(disp_dataset)
-        if "cutoff_distance" in disp_dataset:
+        if "cutoff_radius" in disp_dataset:
             fc3 = get_fc3(
                 supercell,
                 disp_dataset,
@@ -836,7 +812,9 @@ else:
                 symmetry,
                 verbose=log_level)
             if log_level:
-                print "Cutting-off pair:",  disp_dataset['cutoff_distance']
+                print "Cutting-off atomic interaction radius:"
+                for atom, radius in disp_dataset['cutoff_radius'].items():
+                    print "%3s %5.2f" %(atom, radius)
             cutoff_fc3(fc3,
                        supercell,
                        disp_dataset,
@@ -852,13 +830,12 @@ else:
                 is_permutation_symmetry=options.is_symmetrize_fc3_r,
                 verbose=log_level)
 
-    # fc3 is cut-off by the distances among atoms and replaced by zero.
-    cutoff.set_cell(supercell, symprec = symmetry.get_symmetry_tolerance())
-    atom_triplet_cut = (cutoff.get_triplet_inclusion()==False) # is_cut and is_include
-    if not np.alltrue(cutoff.get_triplet_inclusion()):
-        print "fc3 beyond the cutoff is set as zero"
-        cutoff_fc3_by_zero(fc3, cutoff.get_triplet_inclusion())
-        show_drift_fc3(fc3)
+    # # fc3 is cut-off by the distances among atoms and replaced by zero.
+    # cutoff.set_cell(supercell, symprec = symmetry.get_symmetry_tolerance())
+    # if not np.alltrue(cutoff.get_triplet_inclusion()):
+    #     print "fc3 beyond the cutoff is set as zero"
+    #     cutoff_fc3_by_zero(fc3, cutoff.get_triplet_inclusion())
+    #     show_drift_fc3(fc3)
     # Symmetrize fc3_r
     if options.is_symmetrize_fc3_r:
         if log_level:
@@ -1087,14 +1064,18 @@ if run_mode == "isotope":
 
 if log_level:
     print "Cutoff frequency:", settings.get_cutoff_frequency()
-cutoff.set_cell(primitive,symprec=symmetry.get_symmetry_tolerance())
-cutoff_fc3q = (cutoff.get_triplet_inclusion()==False)
+# cutoff.set_cell(primitive,symprec=symmetry.get_symmetry_tolerance())
+# cutoff_fc3q = (cutoff.get_triplet_inclusion()==False)
+
+
 if settings.get_band_indices() is None:
     band_indices = [range(primitive.get_number_of_atoms() * 3)]
 else:
     band_indices = settings.get_band_indices()
 band_indices_flatten = np.intc([x for bi in band_indices for x in bi])
 
+# atom_triplet_cut = (np.abs(fc3) < np.abs(fc3).max() / 1e3).all(axis=(3,4,5))
+atom_triplet_cut = None
 interaction = Interaction(
     fc3,
     supercell,
@@ -1104,7 +1085,6 @@ interaction = Interaction(
     frequency_factor_to_THz=factor,
     symprec=options.symprec,
     atom_triplet_cut = atom_triplet_cut,
-    cutoff_fc3q = cutoff_fc3q,
     cutoff_frequency=settings.get_cutoff_frequency(),
     cutoff_hfrequency=settings.get_cutoff_hfrequency(),
     cutoff_delta = settings.get_cutoff_delta(),
