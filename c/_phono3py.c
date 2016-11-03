@@ -19,6 +19,7 @@
 
 static PyObject * py_get_jointDOS(PyObject *self, PyObject *args);
 static PyObject * py_get_decay_channel(PyObject *self, PyObject *args);
+static PyObject * py_get_decay_channel_thm(PyObject *self, PyObject *args);
 static PyObject * py_get_interaction(PyObject *self, PyObject *args);
 static PyObject * py_get_imag_self_energy(PyObject *self, PyObject *args);
 static PyObject * py_get_imag_self_energy_at_bands(PyObject *self,
@@ -95,6 +96,7 @@ static void set_triplet_integration_1D_at_triplet(double *iw_triplet, //shape: n
 static PyMethodDef functions[] = {
   {"joint_dos", py_get_jointDOS, METH_VARARGS, "Calculate joint density of states"},
   {"decay_channel", py_get_decay_channel, METH_VARARGS, "Calculate decay of phonons"},
+  {"decay_channel_thm", py_get_decay_channel_thm, METH_VARARGS, "Calculate decay of phonons with integration weights given"},
   {"interaction", py_get_interaction, METH_VARARGS, "Interaction of triplets"},
   {"imag_self_energy", py_get_imag_self_energy, METH_VARARGS, "Imaginary part of self energy"},
   {"imag_self_energy_at_bands", py_get_imag_self_energy_at_bands, METH_VARARGS, "Imaginary part of self energy at phonon frequencies of bands"},
@@ -871,6 +873,50 @@ static PyObject * py_get_decay_channel(PyObject *self, PyObject *args)
 		     t,
 		     cutoff_frequency);
   
+  Py_RETURN_NONE;
+}
+
+static PyObject * py_get_decay_channel_thm(PyObject *self, PyObject *args)
+{
+  PyArrayObject* decay_values;
+  PyArrayObject* amplitudes;
+  PyArrayObject* omegas;
+  PyArrayObject* frequencies;
+  PyArrayObject* integration_weights;
+  double sigma, t, cutoff_frequency;
+
+  if (!PyArg_ParseTuple(args, "OOOOOdd",
+			&decay_values,
+			&amplitudes,
+			&frequencies,
+			&omegas,
+			&integration_weights,
+			&cutoff_frequency,
+			&t)) {
+    return NULL;
+  }
+
+
+  double* decay = (double*)decay_values->data;
+  const double* amp = (double*)amplitudes->data;
+  const double* f = (double*)frequencies->data;
+  const double* o = (double*)omegas->data;
+  const double* g = (double *)integration_weights->data;
+  const int num_band = (int)amplitudes->dimensions[2];
+  const int num_triplet = (int)amplitudes->dimensions[0];
+  const int num_omega = (int)omegas->dimensions[0];
+
+  get_decay_channels_thm(decay,
+                         num_omega,
+                         num_triplet,
+                         num_band,
+                         o,
+                         f,
+                         amp,
+                         g,
+                         t,
+                         cutoff_frequency);
+
   Py_RETURN_NONE;
 }
 

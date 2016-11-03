@@ -51,30 +51,12 @@ class ImagSelfEnergy:
         self._interaction.set_grid_points(grid_points)
 
 
-    def run(self, scattering_class=None, is_triplet_symmetry=True,):
+    def run(self, scattering_class=None, is_triplet_symmetry=True):
         if self._fc3_normal_squared is None:        
             self.run_interaction()
         if self._g is None:
             self.set_integration_weights(scattering_event_class=scattering_class, is_triplet_symmetry=is_triplet_symmetry)
         num_band0 = self._fc3_normal_squared.shape[1]
-
-        # if not self._is_thm:
-        #     if self._fpoints is None:
-        #         self._imag_self_energy = np.zeros(num_band0, dtype='double')
-        #         if self._is_nu:
-        #             self.set_nu_properties()
-        #         if self._lang == 'C':
-        #             self._run_c_with_band_indices()
-        #         else:
-        #             self._run_py_with_band_indices()
-        #     else:
-        #         self._imag_self_energy = np.zeros((len(self._fpoints), num_band0),
-        #                                           dtype='double')
-        #         if self._lang == 'C':
-        #             self._run_c_with_fpoints()
-        #         else:
-        #             self._run_py_with_fpoints()
-        # else:
         if self._fpoints is None:
             self._imag_self_energy = np.zeros(num_band0, dtype='double')
             self._run_thm_with_band_indices()
@@ -292,7 +274,7 @@ class ImagSelfEnergy:
     def get_imag_self_energy(self):
         if self._cutoff_frequency is None:
             return self._imag_self_energy
-        else: # AverXaging imag-self-energies by degenerate bands
+        else: # Averaging imag-self-energies by degenerate bands
             imag_se = np.zeros_like(self._imag_self_energy)
             freqs = self._frequencies[self._grid_point]
             deg_sets = degenerate_sets(freqs) # such like [[0,1], [2], [3,4,5]]

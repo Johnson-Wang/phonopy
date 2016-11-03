@@ -351,6 +351,54 @@ int get_decay_channels(double *decay,
   return 1;
 }
 
+int get_decay_channels_thm(double *decay,
+                           const int num_omega,
+                           const int num_triplet,
+                           const int num_band,
+                           const double *o,
+                           const double *f,
+                           const double *fc3_normal_sqared,
+                           const double *g,
+                           const double t,
+                           const double cutoff_frequency)
+{
+  int i, j, k, l, address_a, address_d, tbbb = num_triplet * num_omega * num_band * num_band;
+  double f1, f2, f3, n1, n2, n3;
+#pragma omp parallel for private(j, k, l, address_a, address_d, f1, f2, f3, n1, n2, n3)
+  for (i = 0; i < num_triplet; i++) {
+    for (j = 0; j < num_band; j++) {
+      for (k = 0; k < num_band; k++) {
+	for (l = 0; l < num_omega; l++) {
+	  address_a = i * num_omega * num_band * num_band + l * num_band * num_band + j * num_band + k;
+	  address_d = i * num_band * num_band + j * num_band + k;
+	  f1 = o[l];
+	  f2 = f[i * 3 * num_band + num_band + j];
+	  f3 = f[i * 3 * num_band + 2 * num_band + k];
+	  if (f2>cutoff_frequency && f3 >cutoff_frequency){
+	    if (t > 0)
+	    {
+	      n1 = bose_einstein(f1, t);
+	      n2 = bose_einstein(f2, t);
+	      n3 = bose_einstein(f3, t);
+          #pragma omp atomic
+          decay[address_d] += ((n1+1) * n2 * n3 * g[address_a] +
+                    (n2+1) * n1 * n3 * g[address_a + tbbb] +
+                    (n3+1) * n1 * n2 * g[address_a + 2 * tbbb]) *
+                    fc3_normal_sqared[address_a] / n1 / (n1 + 1);
+	    }
+	    else
+	    {
+	      decay[address_d] += g[address_a] * fc3_normal_sqared[address_a];
+	    }
+	  }
+	}
+      }
+    }
+  }
+
+  return 1;
+}
+
 void get_thm_imag_self_energy_at_bands(double *imag_self_energy,
 				       const Darray *fc3_normal_sqared,
 				       const double *frequencies,

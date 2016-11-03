@@ -1123,6 +1123,8 @@ if run_mode == "decay_channel":
     phono3py.get_decay_channels(grid_points=grid_points,
                                 sets_of_band_indices=settings.get_band_indices(),
                                 sigmas=multiple_sigmas,
+                                nu=settings.get_nu(),
+                                scattering_class=scattering_class,
                                 read_amplitude=settings.get_read_amplitude(),
                                 temperature=temperatures,
                                 filename=options.output_filename)

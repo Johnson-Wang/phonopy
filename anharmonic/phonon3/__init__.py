@@ -213,10 +213,12 @@ class Phono3py:
                            grid_points,
                            sets_of_band_indices,
                            sigmas=[0.2],
+                           nu=None,
+                           scattering_class=None,
                            read_amplitude=False,
                            temperature=None,
                            filename=None):
-
+        self._interaction.set_is_disperse(True)
         if grid_points==None:
             print "Grid points are not specified."
             return False
@@ -225,7 +227,7 @@ class Phono3py:
             print "Band indices are not specified."
             return False
         self._read_amplitude = read_amplitude
-        decay=DecayChannel(self._interaction)
+        decay=DecayChannel(self._interaction, nu=nu, scattering_class=scattering_class)
         for gp in grid_points:
             decay.set_grid_point(gp)
             if self._log_level:
@@ -233,9 +235,10 @@ class Phono3py:
                 print "------ Decay channel ------"
                 print "Number of ir-triplets:",
                 print "%d / %d" % (len(weights), weights.sum())
-            decay.run_interaction(read_amplitude=self._read_amplitude)
+            # decay.run_interaction()
             for sigma in sigmas:
                 decay.set_sigma(sigma)
+                decay.run_interaction()
                 for i, t in enumerate(temperature):
                     decay.set_temperature(t)
                     decay.get_decay_channels(filename = filename)

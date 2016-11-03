@@ -48,6 +48,17 @@ int get_decay_channels(double *decay,
 		       const double t,
 		       const double unit_conversion_factor);
 
+int get_decay_channels_thm(double *decay,
+                           const int num_omega,
+                           const int num_triplet,
+                           const int num_band,
+                           const double *o,
+                           const double *f,
+                           const double *fc3_normal_sqared,
+                           const double *g,
+                           const double t,
+                           const double cutoff_frequency);
+
 void get_thm_imag_self_energy_at_bands(double *imag_self_energy,
 				       const Darray *fc3_normal_sqared,
 				       const double *frequencies,
