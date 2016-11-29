@@ -9,6 +9,7 @@ import phonopy.structure.spglib as spg
 from phonopy.structure.symmetry import Symmetry
 from phonopy.units import VaspToTHz, total_time
 from phonopy.structure.atoms import isotope_data
+from anharmonic.file_IO import  read_collision_at_grid_from_hdf5,write_collision_to_hdf5_at_grid
 
 def get_mass_variances(primitive):
     symbols = primitive.get_chemical_symbols()
@@ -143,11 +144,29 @@ class CollisionIso:
 
     @total_time.timeit
     def run(self, lang="C"):
-        if lang=="C":
-            self._run_c()
-        else:
-            self._run_py()
-
+        isrun = True
+        if self._is_read_col:
+            is_error = read_collision_at_grid_from_hdf5(self._collision_in,
+                                             self._mesh,
+                                             self._grid_point,
+                                             self._sigma,
+                                             self._temp,
+                                             file_name='iso')
+            if not is_error:
+                self._collision_out = np.dot(self._weights2, self._collision_in.sum(axis=-1))
+                isrun = False
+        if isrun:
+            if lang=="C":
+                self._run_c()
+            else:
+                self._run_py()
+            if self._is_write_col:
+                write_collision_to_hdf5_at_grid(self._collision_in,
+                                                 self._mesh,
+                                                 self._grid_point,
+                                                 self._sigma,
+                                                 self._temp,
+                                                 file_name='iso')
     def get_mass_variances(self):
         return self._mass_variances
 

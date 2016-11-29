@@ -856,7 +856,7 @@ def write_collision_to_hdf5_at_grid(collision_at_grid,
     name="scr" + suffix + ".hdf5"
     filename = os.path.join(path, name)
     w = h5py.File(filename, "w")
-    w.create_dataset('scattering', data=collision_at_grid)
+    w.create_dataset('scattering', data=collision_at_grid, compression="gzip", fillvalue=0., compression_opts=9)
     w.close()
     if log_level:
         print "Irreducible scattering rate written to %s" %name
@@ -923,8 +923,9 @@ def read_collision_at_grid_from_hdf5(collision,
     filename = os.path.join(path, name)
 
     if not os.path.exists(path):
-        print "The file %s does not exist"%filename
-        print "The scattering rate at T=%.1f would be then calculated"%temperature
+        if log_level:
+            print "The file %s does not exist"%filename
+            print "The scattering rate at T=%.1f would be then calculated"%temperature
         return 1
     r=h5py.File(filename, 'r')
     collision[:]= r['scattering'][:]
@@ -1266,7 +1267,7 @@ def write_amplitude_to_hdf5(amplitude,
     suffix = "-m%d%d%d" % tuple(mesh)
     suffix += ("-g%d" % grid_point)
     w = h5py.File("amplitude" + suffix + ".hdf5", 'w')
-    w.create_dataset('amplitude', data=amplitude)
+    w.create_dataset('amplitude', data=amplitude, compression="gzip", fillvalue=0., compression_opts=9)
     if triplet is not None:
         w.create_dataset('triplet', data=triplet)
     if weight is not None:
@@ -1431,7 +1432,7 @@ def write_amplitude_to_hdf5_at_grid(mesh, grid, amplitude, path = None, is_nosym
         os.mkdir(path)
     path = os.path.join(path, filename)
     f = h5py.File(path, "w")
-    f.create_dataset("amplitude", data=amplitude)
+    f.create_dataset("amplitude", data=amplitude, compression="gzip", fillvalue=0., compression_opts=9)
     f.close()
 
 

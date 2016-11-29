@@ -14,8 +14,11 @@ class DecayChannel:
                  temperature=None,
                  sigma=0.1,
                  is_thm = False,
+                 is_band_connection=False,
                  lang='C'):
         self._interaction = interaction
+        if is_band_connection:
+            interaction.set_phonons_all(is_band_connection=is_band_connection)
         self._is_nosym=interaction._is_nosym
         self._mesh=interaction.get_mesh_numbers()
         self._num_atom=interaction.get_primitive().get_number_of_atoms()

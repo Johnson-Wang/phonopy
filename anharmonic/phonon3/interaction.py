@@ -715,8 +715,7 @@ class Interaction:
         #                         self._mesh,
         #                         self._fc3,
         #                         atc,
-        #                         atc_rec,
-        #                         np.einsum("Nijk->N%s"%new, g_skip).copy(),
+        #                         np.zeros_like(g_skip),
         #                         svecs,
         #                         multiplicity,
         #                         np.double(masses),
@@ -728,7 +727,7 @@ class Interaction:
         #                         self._cutoff_hfrequency,
         #                         self._cutoff_delta)
         #     interaction[i,:] = np.einsum("N%s->Nijk"%new, interaction0)
-        # diff = np.abs(self._interaction_strength_reduced - np.average(interaction, axis=0))
+        # diff = np.abs(interaction - interaction[0])
         # print np.unravel_index(diff.argmax(), diff.shape), diff.max()
 
 

@@ -590,7 +590,7 @@ static PyObject * py_get_imag_self_energy(PyObject *self, PyObject *args)
 			&temperature,
 			&asigma_py,
 			&unit_conversion_factor,
-                        &cutoff_delta,
+            &cutoff_delta,
 			&cutoff_frequency,
 			&cutoff_gamma)) {
     return NULL;

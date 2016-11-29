@@ -21,6 +21,7 @@ class Cutoff():
         self._pair_distances = None
         n = len(species)
         self._cut_radius = None
+        self._include_triplet = None
         if cut_radius is not None:
             if len(cut_radius) == 1:
                 self._cut_radius_species = {species[i]:cut_radius[0] for i in range(n)}
@@ -45,6 +46,7 @@ class Cutoff():
             for i in range(num_atom):
                 self._cut_radius[i] = self._cut_radius_species[chemical_symbols[i]]
         self._pair_distances = None
+        self._include_triplet = None
 
     def get_cutoff_radius(self):
         return self._cut_radius_species
@@ -52,13 +54,14 @@ class Cutoff():
     def set_pair_distances(self):
         num_atom = self._cell.get_number_of_atoms()
         lattice = self._cell.get_cell()
-        min_distances = np.zeros((num_atom, num_atom), dtype='double')
-        for i in range(num_atom): # run in cell
-            for j in range(i): # run in primitive
-                min_distances[i, j] = np.linalg.norm(np.dot(
+        self._pair_distances = np.zeros((num_atom, num_atom), dtype='double')
+        for i in range(num_atom):
+            for j in range(i):
+                dist = np.linalg.norm(np.dot(
                         get_equivalent_smallest_vectors(
                             i, j, self._cell, lattice, self._symprec)[0], lattice))
-        self._pair_distances = (min_distances + min_distances.T) / 2.
+                self._pair_distances[i, j] = dist
+                self._pair_distances[j, i] = dist
 
     def get_pair_inclusion(self, pairs=None):
         lattice = self._cell.get_cell()
@@ -73,31 +76,45 @@ class Cutoff():
         return include_pair
 
     def get_triplet_inclusion(self, triplets=None):
-        lattice = self._cell.get_cell()
-        if triplets is None:
-            include_triplet = np.ones(len(triplets), dtype=bool)
-            for i, (a1, a2, a3) in enumerate(triplets):
-                d12 = \
-                    np.linalg.norm(np.dot(get_equivalent_smallest_vectors(
-                            a2, a1, self._cell, lattice, self._symprec)[0], lattice))
-                d23 = \
-                    np.linalg.norm(np.dot(get_equivalent_smallest_vectors(
-                            a3, a2, self._cell, lattice, self._symprec)[0], lattice))
-                d13 = \
-                    np.linalg.norm(np.dot(get_equivalent_smallest_vectors(
-                            a3, a1, self._cell, lattice, self._symprec)[0], lattice))
-                if d12 > self._cut_radius[a1] + self._cut_radius[a2] or\
-                    d23 > self._cut_radius[a2] + self._cut_radius[a3] or\
-                    d13 > self._cut_radius[a1] + self._cut_radius[a3]:
-                    include_triplet[i] = False
+        if self._include_triplet is not None:
+            return self._include_triplet
         else:
-            num_atom = self._cell.get_number_of_atoms()
-            include_triplet= np.ones((num_atom, num_atom, num_atom), dtype=bool)
-            # for i, j, k in np.ndindex(num_atom, num_atom, num_atom):
-            #     max_dist = max(self._pair_distances[i,j], self._pair_distances[j,k],self._pair_distances[i,k])
-            #     if max_dist > cut_triplet[i, j, k]:
-            #         include_triplet[i,j, k] = False
-        return include_triplet
+            lattice = self._cell.get_cell()
+            if triplets is not None:
+                include_triplet = np.ones(len(triplets), dtype=bool)
+                for i, (a1, a2, a3) in enumerate(triplets):
+                    d12 = \
+                        np.linalg.norm(np.dot(get_equivalent_smallest_vectors(
+                                a2, a1, self._cell, lattice, self._symprec)[0], lattice))
+                    d23 = \
+                        np.linalg.norm(np.dot(get_equivalent_smallest_vectors(
+                                a3, a2, self._cell, lattice, self._symprec)[0], lattice))
+                    d13 = \
+                        np.linalg.norm(np.dot(get_equivalent_smallest_vectors(
+                                a3, a1, self._cell, lattice, self._symprec)[0], lattice))
+                    if d12 > self._cut_radius[a1] + self._cut_radius[a2] and\
+                        d23 > self._cut_radius[a2] + self._cut_radius[a3] and\
+                        d13 > self._cut_radius[a1] + self._cut_radius[a3]:
+                        include_triplet[i] = False
+            else:
+                num_atom = self._cell.get_number_of_atoms()
+                include_triplet= np.ones((num_atom, num_atom, num_atom), dtype=bool)
+                if self._pair_distances is None:
+                    self.set_pair_distances()
+                for i in range(num_atom):
+                    for j in range(i):
+                        for k in range(j):
+                            if (self._pair_distances[i,j] > self._cut_radius[i] + self._cut_radius[j] and
+                                self._pair_distances[i,k] > self._cut_radius[i] + self._cut_radius[k] and
+                                self._pair_distances[j,k] > self._cut_radius[j] + self._cut_radius[k]):
+                                include_triplet[i, j, k] = False
+                                include_triplet[i, k, j] = False
+                                include_triplet[j, i, k] = False
+                                include_triplet[j, k, i] = False
+                                include_triplet[k, i, j] = False
+                                include_triplet[k, j, i] = False
+            self._include_triplet = include_triplet
+            return include_triplet
 
 
 #

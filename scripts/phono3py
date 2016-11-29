@@ -541,7 +541,6 @@ for symbol in unitcell.get_chemical_symbols():
 cutoff = Cutoff(species,
                 settings.get_cutoff_radius())
 
-
 if options.is_displacement:
     run_mode = "displacements"
 elif options.write_grid_points:
@@ -829,13 +828,6 @@ else:
                 is_translational_symmetry=options.is_translational_symmetry,
                 is_permutation_symmetry=options.is_symmetrize_fc3_r,
                 verbose=log_level)
-
-    # # fc3 is cut-off by the distances among atoms and replaced by zero.
-    # cutoff.set_cell(supercell, symprec = symmetry.get_symmetry_tolerance())
-    # if not np.alltrue(cutoff.get_triplet_inclusion()):
-    #     print "fc3 beyond the cutoff is set as zero"
-    #     cutoff_fc3_by_zero(fc3, cutoff.get_triplet_inclusion())
-    #     show_drift_fc3(fc3)
     # Symmetrize fc3_r
     if options.is_symmetrize_fc3_r:
         if log_level:
@@ -853,6 +845,15 @@ else:
         if log_level:
             print "----- Write fc3.hdf5 -----"
         write_fc3_to_hdf5(fc3)
+
+    # # fc3 is cut-off by the distances among atoms and replaced by zero.
+    if settings.get_read_fc3() and (cutoff.get_cutoff_radius() is not None):
+        cutoff.set_cell(supercell, symprec = symmetry.get_symmetry_tolerance())
+        if not np.alltrue(cutoff.get_triplet_inclusion()):
+            print "fc3 beyond the cutoff is set as zero"
+            cutoff_fc3_by_zero(fc3, cutoff.get_triplet_inclusion())
+            print "After trimming,"
+            show_drift_fc3(fc3)
 
 #============================
 # Phonon Gruneisen parameter
@@ -1075,7 +1076,10 @@ else:
 band_indices_flatten = np.intc([x for bi in band_indices for x in bi])
 
 # atom_triplet_cut = (np.abs(fc3) < np.abs(fc3).max() / 1e3).all(axis=(3,4,5))
-atom_triplet_cut = None
+if cutoff.get_cutoff_radius() is not None:
+    atom_triplet_cut = np.logical_not(cutoff.get_triplet_inclusion())
+else:
+    atom_triplet_cut = None
 interaction = Interaction(
     fc3,
     supercell,
@@ -1094,7 +1098,6 @@ interaction = Interaction(
     is_write_amplitude=settings.get_write_amplitude(),
     is_read_amplitude=settings.get_read_amplitude(),
     lapack_zheev_uplo=options.uplo)
-
 
 phono3py = Phono3py(interaction,
                     mass_variances=mass_variances,

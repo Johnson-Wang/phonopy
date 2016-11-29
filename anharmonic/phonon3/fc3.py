@@ -387,7 +387,6 @@ def cutoff_fc3_by_zero(fc3, cut_triplet):
             fc3[i,j,k] = 0.
     return cut_triplet
 
-
 def _get_fc3_one_atom(fc3,
                       supercell,
                       disp_dataset,
