@@ -135,7 +135,8 @@ class Interaction:
                  is_nosym=False,
                  symmetrize_fc3_q=False,
                  symprec=1e-3,
-                 atom_triplet_cut = None,
+                 triplet_cut_super = None,
+                 triplet_cut_prim = None,
                  cutoff_frequency=None,
                  cutoff_hfrequency=None,
                  cutoff_delta = None,
@@ -148,7 +149,6 @@ class Interaction:
         self._supercell = supercell
         self._primitive = primitive
         self._mesh = np.intc(mesh)
-
         num_band = primitive.get_number_of_atoms() * 3
         if band_indices is None:
             self._band_indices = np.arange(num_band, dtype='intc')
@@ -158,10 +158,17 @@ class Interaction:
         self._symprec = symprec
         self._is_tripelts_permute=is_triplets_permute
         natom_super = supercell.get_number_of_atoms()
-        if atom_triplet_cut is None:
-            self._atom_triplet_cut=np.zeros((natom_super, natom_super, natom_super), dtype=bool)
+        natom_prim = primitive.get_number_of_atoms()
+        if triplet_cut_super is None:
+            self._triplet_cut_super=np.zeros((natom_super, natom_super, natom_super), dtype='bool')
         else:
-            self._atom_triplet_cut=atom_triplet_cut
+            self._triplet_cut_super=triplet_cut_super
+
+        if triplet_cut_prim is None:
+            self._triplet_cut_prim=np.zeros((natom_prim, natom_prim, natom_prim), dtype='bool')
+        else:
+            self._triplet_cut_prim=triplet_cut_prim
+
         if cutoff_delta is None:
             self._cutoff_delta = 1000.0
         else:
@@ -197,6 +204,10 @@ class Interaction:
             grid_mapping, grid_mapping_rots = get_mappings(self._mesh,
                                         self.get_point_group_operations(),
                                         qpoints=np.array([0,0,0],dtype="double"))
+
+        self._svecs, self._multiplicity = get_smallest_vectors(self._supercell,
+                                                                 self._primitive,
+                                                                 self._symprec)
         self._grid_mapping = grid_mapping
         self._grid_mapping_rot = grid_mapping_rots
 
@@ -672,13 +683,11 @@ class Interaction:
             g_skip = np.zeros_like(self._interaction_strength_reduced, dtype="bool")
         assert g_skip.shape == self._interaction_strength_reduced.shape
         self._set_phonon_c()
-        svecs, multiplicity = get_smallest_vectors(self._supercell,
-                                                   self._primitive,
-                                                   self._symprec)
         masses = np.double(self._primitive.get_masses())
         p2s = np.intc(self._primitive.get_primitive_to_supercell_map())
         s2p = np.intc(self._primitive.get_supercell_to_primitive_map())
-        atc=np.intc(self._atom_triplet_cut) # int type
+        atc=np.intc(self._triplet_cut_super) # int type
+        atc_prim = np.intc(self._triplet_cut_prim) # int type
         phono3c.interaction(self._interaction_strength_reduced,
                             self._frequencies,
                             self._eigenvectors,
@@ -687,9 +696,10 @@ class Interaction:
                             self._mesh,
                             self._fc3,
                             atc,
+                            atc_prim,
                             g_skip,
-                            svecs,
-                            multiplicity,
+                            self._svecs,
+                            self._multiplicity,
                             np.double(masses),
                             p2s,
                             s2p,
@@ -790,7 +800,7 @@ class Interaction:
                                self._primitive,
                                self._mesh,
                                symprec=self._symprec,
-                               atom_triplet_cut=self._atom_triplet_cut)
+                               atom_triplet_cut=self._triplet_cut_super)
 
         r2n = ReciprocalToNormal(self._primitive,
                                  self._frequencies,

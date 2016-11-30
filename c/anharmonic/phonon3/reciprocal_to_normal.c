@@ -11,10 +11,12 @@ static double fc3_sum_squared(const int bi0,
 			      const lapack_complex_double *eigvecs1,
 			      const lapack_complex_double *eigvecs2,
 			      const lapack_complex_double *fc3_reciprocal,
+			      const int *atc_rec,
 			      const double *masses,
 			      const int num_atom);
 void reciprocal_to_normal(double *fc3_normal_squared,
 			  const lapack_complex_double *fc3_reciprocal,
+			  const int *atc_rec,
 			  const double *freqs0,
 			  const double *freqs1,
 			  const double *freqs2,
@@ -61,6 +63,7 @@ void reciprocal_to_normal(double *fc3_normal_squared,
                 fc3_sum_squared(bi, bj, bk,
                         eigvecs0, eigvecs1, eigvecs2,
                         fc3_reciprocal,
+                        atc_rec,
                         masses,
                         num_atom) / fff;
             }
@@ -78,6 +81,7 @@ static double fc3_sum_squared(const int bi0,
 			      const lapack_complex_double *eigvecs1,
 			      const lapack_complex_double *eigvecs2,
 			      const lapack_complex_double *fc3_reciprocal,
+			      const int *atc_rec,
 			      const double *masses,
 			      const int num_atom)
 {
@@ -90,29 +94,44 @@ static double fc3_sum_squared(const int bi0,
   for (i = 0; i < num_atom; i++) {
     for (j = 0; j < num_atom; j++) {
       for (k = 0; k < num_atom; k++) {
-	sum_real_cart = 0;
-	sum_imag_cart = 0;
-	mmm = sqrt(masses[i] * masses[j] * masses[k]);
-	for (l = 0; l < 3; l++) {
-	  for (m = 0; m < 3; m++) {
-	    for (n = 0; n < 3; n++) {
-	      eig_prod =
-		phonoc_complex_prod(eigvecs0[(i * 3 + l) * num_atom * 3 + bi0],
-                phonoc_complex_prod(eigvecs1[(j * 3 + m) * num_atom * 3 + bi1],
-		phonoc_complex_prod(eigvecs2[(k * 3 + n) * num_atom * 3 + bi2],
-                fc3_reciprocal[i * num_atom * num_atom * 27 +
-			       j * num_atom * 27 +
-			       k * 27 +
-			       l * 9 +
-			       m * 3 +
-			       n])));
-	      sum_real_cart += lapack_complex_double_real(eig_prod);
-	      sum_imag_cart += lapack_complex_double_imag(eig_prod);
-	    }
-	  }
-	}
-	sum_real += sum_real_cart / mmm;
-	sum_imag += sum_imag_cart / mmm;
+        if (atc_rec[i * num_atom * num_atom + j * num_atom + k])
+        {
+//          sum_real_cart = 0.;
+//          for (l = 0; l < 27; l++)
+//          {
+//            sum_real_cart +=
+//            lapack_complex_double_real(fc3_reciprocal[i * num_atom * num_atom * 27 + j * num_atom * 27 + k * 27 + l]) *
+//            lapack_complex_double_real(fc3_reciprocal[i * num_atom * num_atom * 27 + j * num_atom * 27 + k * 27 + l]) +
+//            lapack_complex_double_imag(fc3_reciprocal[i * num_atom * num_atom * 27 + j * num_atom * 27 + k * 27 + l]) *
+//            lapack_complex_double_imag(fc3_reciprocal[i * num_atom * num_atom * 27 + j * num_atom * 27 + k * 27 + l]);
+//          }
+//          if (sum_real_cart > 1e-8)
+//            printf("%d %d %d %f\n", i,j,k, sum_real_cart);
+          continue;
+        }
+        sum_real_cart = 0;
+        sum_imag_cart = 0;
+        mmm = sqrt(masses[i] * masses[j] * masses[k]);
+        for (l = 0; l < 3; l++) {
+          for (m = 0; m < 3; m++) {
+            for (n = 0; n < 3; n++) {
+              eig_prod =
+            phonoc_complex_prod(eigvecs0[(i * 3 + l) * num_atom * 3 + bi0],
+                    phonoc_complex_prod(eigvecs1[(j * 3 + m) * num_atom * 3 + bi1],
+            phonoc_complex_prod(eigvecs2[(k * 3 + n) * num_atom * 3 + bi2],
+                    fc3_reciprocal[i * num_atom * num_atom * 27 +
+                       j * num_atom * 27 +
+                       k * 27 +
+                       l * 9 +
+                       m * 3 +
+                       n])));
+              sum_real_cart += lapack_complex_double_real(eig_prod);
+              sum_imag_cart += lapack_complex_double_imag(eig_prod);
+            }
+          }
+        }
+        sum_real += sum_real_cart / mmm;
+        sum_imag += sum_imag_cart / mmm;
       }
     }
   }

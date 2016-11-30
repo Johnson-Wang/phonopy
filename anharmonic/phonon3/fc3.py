@@ -381,11 +381,11 @@ def cutoff_fc3(fc3,
                     fc3, fc3_done, i, j, k)
                 copy_permutation_symmetry_fc3_elem(fc3, ave_fc3, i, j, k)
 
-def cutoff_fc3_by_zero(fc3, cut_triplet):
+def cutoff_fc3_by_zero(fc3, include_triplet):
     for i, j, k in np.ndindex(fc3.shape[:3]):
-        if not cut_triplet[i,j,k]:
+        if not include_triplet[i, j, k]:
             fc3[i,j,k] = 0.
-    return cut_triplet
+    return include_triplet
 
 def _get_fc3_one_atom(fc3,
                       supercell,

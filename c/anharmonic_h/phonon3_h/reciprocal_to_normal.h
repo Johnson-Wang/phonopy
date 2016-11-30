@@ -6,6 +6,7 @@
 
 void reciprocal_to_normal(double *fc3_normal_squared,
 			  const lapack_complex_double *fc3_reciprocal,
+			  const int *atc_rec,
 			  const double *freqs0,
 			  const double *freqs1,
 			  const double *freqs2,

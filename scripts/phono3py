@@ -786,7 +786,7 @@ if (options.is_joint_dos or
         settings.get_read_amplitude() or
         (options.read_col and settings.get_adaptive_sigma_step() == 0)):
     fc3 = None
-    atom_triplet_cut=None
+    atom_triplet_cut_super=None
 else:
     if settings.get_read_fc3(): # Read fc3.hdf5
         if log_level:
@@ -1065,9 +1065,6 @@ if run_mode == "isotope":
 
 if log_level:
     print "Cutoff frequency:", settings.get_cutoff_frequency()
-# cutoff.set_cell(primitive,symprec=symmetry.get_symmetry_tolerance())
-# cutoff_fc3q = (cutoff.get_triplet_inclusion()==False)
-
 
 if settings.get_band_indices() is None:
     band_indices = [range(primitive.get_number_of_atoms() * 3)]
@@ -1077,9 +1074,12 @@ band_indices_flatten = np.intc([x for bi in band_indices for x in bi])
 
 # atom_triplet_cut = (np.abs(fc3) < np.abs(fc3).max() / 1e3).all(axis=(3,4,5))
 if cutoff.get_cutoff_radius() is not None:
-    atom_triplet_cut = np.logical_not(cutoff.get_triplet_inclusion())
+    atom_triplet_cut_super = np.logical_not(cutoff.get_triplet_inclusion())
+    cutoff.set_cell(primitive,symprec=symmetry.get_symmetry_tolerance())
+    atom_triplet_cut_prim = np.logical_not(cutoff.get_triplet_inclusion())
 else:
-    atom_triplet_cut = None
+    atom_triplet_cut_prim = None
+    atom_triplet_cut_super = None
 interaction = Interaction(
     fc3,
     supercell,
@@ -1088,7 +1088,8 @@ interaction = Interaction(
     band_indices=band_indices_flatten,
     frequency_factor_to_THz=factor,
     symprec=options.symprec,
-    atom_triplet_cut = atom_triplet_cut,
+    triplet_cut_super= atom_triplet_cut_super,
+    triplet_cut_prim= atom_triplet_cut_prim,
     cutoff_frequency=settings.get_cutoff_frequency(),
     cutoff_hfrequency=settings.get_cutoff_hfrequency(),
     cutoff_delta = settings.get_cutoff_delta(),

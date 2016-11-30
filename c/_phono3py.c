@@ -487,6 +487,7 @@ static PyObject * py_get_interaction(PyObject *self, PyObject *args)
   PyArrayObject* multiplicity;
   PyArrayObject* fc3_py;
   PyArrayObject* atc_py;
+  PyArrayObject* atc_rec_py;
   PyArrayObject* g_skip_py;
   PyArrayObject* atomic_masses;
   PyArrayObject* p2s_map;
@@ -496,7 +497,7 @@ static PyObject * py_get_interaction(PyObject *self, PyObject *args)
   double cutoff_delta;
   int symmetrize_fc3_q;
 
-  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOOOOiddd",
+  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOOOOOiddd",
 			&fc3_normal_squared_py,
 			&frequencies,
 			&eigenvectors,
@@ -505,6 +506,7 @@ static PyObject * py_get_interaction(PyObject *self, PyObject *args)
 			&mesh_py,
 			&fc3_py,
             &atc_py,
+            &atc_rec_py,
             &g_skip_py,
 			&shortest_vectors,
 			&multiplicity,
@@ -519,7 +521,6 @@ static PyObject * py_get_interaction(PyObject *self, PyObject *args)
     return NULL;
   }
 
-
   Darray* fc3_normal_squared = convert_to_darray(fc3_normal_squared_py);
   Darray* freqs = convert_to_darray(frequencies);
   /* npy_cdouble and lapack_complex_double may not be compatible. */
@@ -530,6 +531,7 @@ static PyObject * py_get_interaction(PyObject *self, PyObject *args)
   const int* mesh = (int*)mesh_py->data;
   Darray* fc3 = convert_to_darray(fc3_py);
   const int* atc = (int*)atc_py->data;
+  const int* atc_rec = (int*)atc_rec_py->data;
   const char* g_skip = (char*)g_skip_py->data;
   Darray* svecs = convert_to_darray(shortest_vectors);
   Iarray* multi = convert_to_iarray(multiplicity);
@@ -546,6 +548,7 @@ static PyObject * py_get_interaction(PyObject *self, PyObject *args)
 		  mesh,
 		  fc3,
           atc,
+          atc_rec,
           g_skip,
 		  svecs,
 		  multi,
