@@ -1077,6 +1077,9 @@ if cutoff.get_cutoff_radius() is not None:
     atom_triplet_cut_super = np.logical_not(cutoff.get_triplet_inclusion())
     cutoff.set_cell(primitive,symprec=symmetry.get_symmetry_tolerance())
     atom_triplet_cut_prim = np.logical_not(cutoff.get_triplet_inclusion())
+    assert np.array([atom_triplet_cut_super[primitive.p2s_map[i[0]], primitive.p2s_map[i[1]], primitive.p2s_map[i[2]]]
+          for i in zip(*np.where(atom_triplet_cut_prim))]).all(),\
+          "The cutoff in unitcell must coordinate with that in supercell"
 else:
     atom_triplet_cut_prim = None
     atom_triplet_cut_super = None

@@ -527,3 +527,38 @@ def _set_permutation_symmetry_fc3_elem_with_cutoff(fc3, fc3_done, a, b, c):
                                 fc3[c, b, a, k, j, i] * fc3_done[c, b, a])
             tensor3[i, j, k] /= sum_done
     return tensor3
+#
+# def _set_permutation_symmetry_fc3_elem_with_cutoff(fc3, fc3_done, a, b, c):
+#     done = np.array([fc3_done[a, b, c],
+#                 fc3_done[c, a, b],
+#                 fc3_done[b, c, a],
+#                 fc3_done[b, a, c],
+#                 fc3_done[c, b, a],
+#                 fc3_done[a, c, b]])
+#     tensor3 = np.zeros((3, 3, 3), dtype='double')
+#     if done.sum() > 0:
+#         fc = np.array([fc3[a, b, c],
+#                        np.einsum('kij',fc3[c, a, b]),
+#                        np.einsum('jki',fc3[b, c, a]),
+#                        np.einsum('ikj',fc3[a, c, b]),
+#                        np.einsum('jik',fc3[b, a, c]),
+#                        np.einsum('kji',fc3[c, b, a])])
+#         fc_done = fc[np.where(done)]
+#         tensor3 = fc_done.sum(axis=0) / len(fc_done)
+#         fcmin = np.abs(fc_done).min(axis=0); fcmax = np.abs(fc_done).max(axis=0)
+#         discrepancy = np.where(fcmax>1e-2, fcmin / fcmax, 1)
+#         if (discrepancy < 1e-2).any():
+#             print a, b, c
+#         # for (i, j, k) in list(np.ndindex(3, 3, 3)):
+#         #     fc = np.array([fc3[a, b, c, i, j, k],
+#         #                    fc3[c, a, b, k, i, j],
+#         #                    fc3[b, c, a, j, k, i],
+#         #                    fc3[a, c, b, i, k, j],
+#         #                    fc3[b, a, c, j, i, k],
+#         #                    fc3[c, b, a, k, j, i]])
+#         #     fc_done = np.extract(done, fc)
+#         #     if len(fc_done) > 2:
+#         #         tensor3[i, j, k] = (fc_done.sum() - fc_done[np.argmin(np.abs(fc_done))] - fc_done[np.argmax(np.abs(fc_done))]) / (len(fc_done) - 2)
+#         #     else:
+#         #         tensor3[i, j, k] = fc_done.sum() / len(fc_done)
+#     return tensor3

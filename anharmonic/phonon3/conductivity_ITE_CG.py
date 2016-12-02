@@ -135,18 +135,16 @@ class conductivity_ITE_CG(Conductivity):
     @total_time.timeit
     def run_smrt_sigma_adaption(self):
         asigma_step = 0
+
         while asigma_step <= self._max_asigma_step:
             if self._collision.get_read_collision() and self._is_adaptive_sigma:
                 self._collision.set_write_collision(True)
-
             if asigma_step > 1:
                 if asigma_step > 2:
                     self._gamma_ppp = self._gamma_pp.copy()
                 self._gamma_pp = self._gamma_prev.copy()
             self._gamma_prev = self._collision._gamma_all.copy()
-
             for s in range(len(self._sigmas)):
-
                 if (self._rkappa[s] < self._diff_kappa).all():
                     continue
                 self.set_sigma(s)

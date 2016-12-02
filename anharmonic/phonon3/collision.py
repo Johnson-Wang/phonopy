@@ -4,7 +4,8 @@ import sys
 from anharmonic.phonon3.imag_self_energy import gaussian
 from anharmonic.phonon3.imag_self_energy import occupation
 from anharmonic.file_IO import  read_collision_all_from_hdf5, write_collision_to_hdf5_all,\
-    read_collision_at_grid_from_hdf5, write_collision_to_hdf5_at_grid
+    read_collision_at_grid_from_hdf5, write_collision_to_hdf5_at_grid, read_integration_weight_from_hdf5_at_grid, \
+    write_integration_weight_to_hdf5_at_grid
 from phonopy.units import THz, Hbar, EV, AMU, Angstrom, total_time
 from anharmonic.phonon3.triplets import get_kgp_index_at_grid
 from triplets import get_triplets_integration_weights
@@ -70,7 +71,6 @@ class Collision():
                                  / (Hbar * EV) ** 2
                                  / (2 * np.pi * THz) ** 2
                                  / np.prod(self._mesh))
-
         self._init_grids_properties()
         self._length = length
         self._gv_delta_q = gv_delta_q
@@ -478,6 +478,14 @@ class Collision():
 
     def set_integration_weights(self, cutoff_g = 1e-8):
         f_points = self._frequencies_all[self._grid_point][self._band_indices]
+
+        is_read_g = False; is_write_g = False
+        if not self._is_adaptive_sigma and len(self._temperatures) > 1:
+            if self._pp.get_is_read_amplitude() or self._pp.get_is_write_amplitude():
+                if self._itemp == 0:
+                    is_write_g = True; is_read_g = False
+                else:
+                    is_write_g = False; is_read_g = True
         if self._asigma is not None:
             sigma_object = self._asigma
             cutoff_g = np.where(self._asigma > 0, cutoff_g / self._asigma, 0)
@@ -487,9 +495,10 @@ class Collision():
             sigma_object = self._sigma
             if sigma_object is not None:
                 cutoff_g = cutoff_g / self._sigma
-
         if self._is_dispersed:
-            if not self._read_col:
+            if is_read_g:
+                self._g = read_integration_weight_from_hdf5_at_grid(self._mesh, self._sigma, self._grid_point)
+            elif not self._read_col:
                 self._g = get_triplets_integration_weights(
                     self._pp,
                     np.array(f_points, dtype='double'),
@@ -497,25 +506,32 @@ class Collision():
                     band_indices=self._band_indices,
                     triplets = self._grid_point_triplets,
                     is_triplet_symmetry=self._pp._symmetrize_fc3_q)
-
                 # when all the integration weights are smaller than the cutoff value
                 # the interaction strength will not be calculated
+                if is_write_g:
+                    write_integration_weight_to_hdf5_at_grid(self._mesh, self._sigma, self._grid_point, self._g)
                 self._g_skip = np.array(self._g[:, self._undone_triplet_index].sum(axis=0) < cutoff_g, dtype="bool")
             else:
                 self._g_skip = None
 
         else:
-            self._g = get_triplets_integration_weights(
-                    self._pp,
-                    np.array(f_points, dtype='double'),
-                    sigma_object,
-                    band_indices=self._band_indices,
-                    triplets = self._triplets_reduced,
-                    is_triplet_symmetry=self._pp._symmetrize_fc3_q)
-            if self._pp.get_triplets_done().all(): #when the interaction strengths are all done
-                self._g_skip = None
-            else:
-                self._g_skip = np.array(np.abs(self._g).sum(axis=0) < cutoff_g, dtype="bool")
+            if is_read_g:
+                self._g = read_integration_weight_from_hdf5_at_grid(self._mesh, self._sigma, self._grid_point)
+            elif not self._read_col:
+                self._g = get_triplets_integration_weights(
+                        self._pp,
+                        np.array(f_points, dtype='double'),
+                        sigma_object,
+                        band_indices=self._band_indices,
+                        triplets = self._triplets_reduced,
+                        is_triplet_symmetry=self._pp._symmetrize_fc3_q)
+                if is_write_g:
+                    write_integration_weight_to_hdf5_at_grid(self._mesh, self._sigma, self._grid_point, self._g)
+                if self._pp.get_triplets_done().all(): #when the interaction strengths are all done
+                    self._g_skip = None
+                else:
+                    self._g_skip = np.array(np.abs(self._g).sum(axis=0) < cutoff_g, dtype="bool")
+
 
     def get_integration_weights(self):
         return self._g
@@ -607,6 +623,7 @@ class Collision():
             self.set_sigma(sigma)
         if temperature is not None:
             self.set_temperature(temperature)
+
         self.set_grid(grid_point)
         self.set_phonons_triplets()
         self.set_grid_points_occupation()

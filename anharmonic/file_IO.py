@@ -1287,6 +1287,24 @@ def write_amplitude_to_hdf5_all(amplitude, mesh, is_nosym=False):
     w.create_dataset('amplitude', data=amplitude)
     w.close()
 
+
+def write_integration_weight_to_hdf5_at_grid(mesh, sigma, grid, integration_weight, path = None, is_nosym = False):
+    suffix = "-m%d%d%d" % tuple(mesh)
+    suffix += "-g%d"%grid
+    suffix += "-s%s"%sigma
+    if is_nosym:
+        suffix += "-nosym"
+    filename = "integration_weight" + suffix + ".hdf5"
+    if path is None:
+        path = "_phonon3_amplitude-m%d%d%d"%tuple(mesh)
+    if not os.path.isdir(path):
+        os.mkdir(path)
+    path = os.path.join(path, filename)
+    f = h5py.File(path, "w")
+    f.create_dataset("iw", data=integration_weight, compression="gzip", fillvalue=0., compression_opts=9)
+    f.close()
+
+
 def write_triplets_to_hdf5(mesh,
                            grid_points,
                            unique_triplets,
@@ -1337,6 +1355,24 @@ def read_amplitude_from_hdf5(amplitudes_at_q,
             index = ''.join(['ijk'[seq[0]], 'ijk'[seq[1]], 'ijk'[seq[2]]])
             amplitudes_at_q[i] =np.einsum("ijk->%s"%index, amplitudes_all[triplets_mapping_at_q[i]])
     f.close()
+
+def read_integration_weight_from_hdf5_at_grid(mesh, sigma, grid, path = None, is_nosym = False):
+    suffix = "-m%d%d%d" % tuple(mesh)
+    suffix += "-g%d"%grid
+    suffix += "-s%s"%sigma
+    if is_nosym:
+        suffix += "-nosym"
+    filename = "integration_weight" + suffix + ".hdf5"
+    if path is None:
+        path = "_phonon3_amplitude-m%d%d%d"%tuple(mesh)
+    path = os.path.join(path, filename)
+    if not os.path.isfile(path):
+        print "Warning! path %s does not exist"%path
+        return None
+    f = h5py.File(path, "r")
+    integration_weight = f['iw'][:]
+    f.close()
+    return integration_weight
 
 @total_time.timeit
 def read_amplitude_from_hdf5_all(amplitude_all, mesh, is_nosym=False): #band indices
