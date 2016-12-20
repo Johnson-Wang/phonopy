@@ -517,7 +517,7 @@ class Collision():
         else:
             if is_read_g:
                 self._g = read_integration_weight_from_hdf5_at_grid(self._mesh, self._sigma, self._grid_point)
-            elif not self._read_col:
+            else:
                 self._g = get_triplets_integration_weights(
                         self._pp,
                         np.array(f_points, dtype='double'),
@@ -533,12 +533,14 @@ class Collision():
                     self._g_skip = np.array(np.abs(self._g).sum(axis=0) < cutoff_g, dtype="bool")
 
 
+
     def get_integration_weights(self):
         return self._g
 
     def get_interaction_skip(self):
         return self._g_skip
 
+    @total_time.timeit
     def run_c(self):
         import anharmonic._phono3py as phono3c
         freq = self._frequencies_all[self._grid_point_triplets]
@@ -632,3 +634,4 @@ class Collision():
         self.set_integration_weights()
         self.run_interaction_at_grid_point(g_skip = self._g_skip)
         self.run()
+

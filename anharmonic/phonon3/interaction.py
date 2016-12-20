@@ -638,6 +638,7 @@ class Interaction:
             self._unique_triplets = np.vstack(self._triplets)[unique_triplet_num]
             self._triplets_done = np.zeros(len(unique_triplet_num), dtype="byte")
             self._triplets_mappings = triplets_mappings #map to the index of the triplets in the unique_triplet_num
+            self._second_mappings = second_mappings
             self._triplets_sequence = triplet_sequence
             nband = 3 * self._primitive.get_number_of_atoms()
             try:

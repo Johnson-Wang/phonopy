@@ -74,6 +74,7 @@ class DecayChannel:
             g_skip = (np.abs(self._g[:, index]).sum(axis=0) < 1e-8)
         else:
             g_skip = (np.abs(self._g).sum(axis=0) < 1e-8)
+        # g_skip = np.zeros_like(g_skip)
         self._interaction.run(g_skip=g_skip,
                               lang=self._lang,
                               log_level=log_level)

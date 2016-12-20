@@ -20,6 +20,7 @@ static PyObject * get_kpointgroup(PyObject *self, PyObject *args);
 static PyObject * get_unique_tetrahedra(PyObject *self, PyObject *args);
 static PyObject * get_reduced_triplets_permute_sym(PyObject *self, PyObject *args);
 static PyObject * get_reduced_pairs_permute_sym(PyObject *self, PyObject *args);
+static PyObject * get_grid_points_by_rotations(PyObject *self, PyObject *args);
 static PyObject * get_BZ_grid_points_by_rotations(PyObject *self, PyObject *args);
 static PyObject * relocate_BZ_grid_address(PyObject *self, PyObject *args);
 static PyObject * get_BZ_triplets_at_q(PyObject *self, PyObject *args);
@@ -68,6 +69,8 @@ static PyMethodDef functions[] = {
    METH_VARARGS, "Reduce the total number of pairs by considering permutation symmetry"},
   {"grid_triplets_at_q", get_grid_triplets_at_q,
    METH_VARARGS, "Grid point triplets on reciprocal mesh points at a specific q-point are set from output variables of triplets_reciprocal_mesh_at_q"},
+  {"grid_points_by_rotations", get_grid_points_by_rotations, METH_VARARGS,
+   "Rotated grid points are returned"},
   {"BZ_grid_points_by_rotations", get_BZ_grid_points_by_rotations, METH_VARARGS,
    "Rotated grid points in BZ are returned"},
   {"BZ_triplets_at_q", get_BZ_triplets_at_q,
@@ -966,6 +969,38 @@ static PyObject * get_reduced_pairs_permute_sym(PyObject *self, PyObject *args)
 						       num_grid,
 						       num_grid_all);
   PyInt_FromLong((long) num_irred_pairs);
+}
+
+static PyObject * get_grid_points_by_rotations(PyObject *self, PyObject *args)
+{
+  PyArrayObject* rot_grid_points_py;
+  PyArrayObject* address_orig_py;
+  PyArrayObject* rot_reciprocal_py;
+  PyArrayObject* mesh_py;
+  PyArrayObject* is_shift_py;
+  if (!PyArg_ParseTuple(args, "OOOOO",
+			&rot_grid_points_py,
+			&address_orig_py,
+			&rot_reciprocal_py,
+			&mesh_py,
+			&is_shift_py)) {
+    return NULL;
+  }
+
+  int *rot_grid_points = (int*)PyArray_DATA(rot_grid_points_py);
+  const int *address_orig = (int*)PyArray_DATA(address_orig_py);
+  SPGCONST int (*rot_reciprocal)[3][3] = (int(*)[3][3])PyArray_DATA(rot_reciprocal_py);
+  const int num_rot = PyArray_DIMS(rot_reciprocal_py)[0];
+  const int* mesh = (int*)PyArray_DATA(mesh_py);
+  const int* is_shift = (int*)PyArray_DATA(is_shift_py);
+
+  spg_get_grid_points_by_rotations(rot_grid_points,
+				   address_orig,
+				   num_rot,
+				   rot_reciprocal,
+				   mesh,
+				   is_shift);
+  Py_RETURN_NONE;
 }
 
 static PyObject * get_BZ_grid_points_by_rotations(PyObject *self, PyObject *args)

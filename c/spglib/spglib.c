@@ -1221,6 +1221,35 @@ static int get_kpoint_group_at_q(int reverse_rotations[][3][3],
   return num_reci_rot;
 }
 
+int spg_get_grid_points_by_rotations(int rot_grid_points[],
+				     const int address_orig[3],
+				     const int num_rot,
+				     SPGCONST int rot_reciprocal[][3][3],
+				     const int mesh[3],
+				     const int is_shift[3])
+{
+  int i;
+  MatINT *rot;
+
+  rot = NULL;
+
+  if ((rot = mat_alloc_MatINT(num_rot)) == NULL) {
+    return 0;
+  }
+
+  for (i = 0; i < num_rot; i++) {
+    mat_copy_matrix_i3(rot->mat[i], rot_reciprocal[i]);
+  }
+  kpt_get_grid_points_by_rotations(rot_grid_points,
+				   address_orig,
+				   rot,
+				   mesh,
+				   is_shift);
+  mat_free_MatINT(rot);
+  rot = NULL;
+
+  return 1;
+}
 
 void spg_get_BZ_grid_points_by_rotations(int rot_grid_points[],
 					 const int address_orig[3],

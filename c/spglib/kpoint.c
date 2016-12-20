@@ -1249,6 +1249,25 @@ static int get_ir_triplets_at_q(int weights[],
   return num_ir_triplets;
 }
 
+void kpt_get_grid_points_by_rotations(int rot_grid_points[],
+				      const int address_orig[3],
+				      const MatINT * rot_reciprocal,
+				      const int mesh[3],
+				      const int is_shift[3])
+{
+  int i;
+  int address_double_orig[3], address_double[3];
+
+  for (i = 0; i < 3; i++) {
+    address_double_orig[i] = address_orig[i] * 2 + is_shift[i];
+  }
+  for (i = 0; i < rot_reciprocal->size; i++) {
+    mat_multiply_matrix_vector_i3(address_double,
+				  rot_reciprocal->mat[i],
+				  address_double_orig);
+    rot_grid_points[i] = get_grid_point_double_mesh(address_double, mesh);
+  }
+}
 
 void kpt_get_BZ_grid_points_by_rotations(int rot_grid_points[],
 					 const int address_orig[3],

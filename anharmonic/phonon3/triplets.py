@@ -525,6 +525,44 @@ def get_point_group_reciprocal_at_grid(grid, mesh, kpoint_operations, no_sym=Fal
                 kpt_operation.append(rot)
     return np.array(kpt_operation, dtype=np.int)
 
+
+def get_grid_points_by_rotations(grid_point,
+                                 reciprocal_rotations,
+                                 mesh,
+                                 mesh_shifts=None):
+    if mesh_shifts is None:
+        mesh_shifts = [False, False, False]
+    return spg.get_grid_points_by_rotations(
+        grid_point,
+        reciprocal_rotations,
+        mesh,
+        is_shift=np.where(mesh_shifts, 1, 0))
+
+def get_BZ_grid_points_by_rotations(grid_point,
+                                    reciprocal_rotations,
+                                    mesh,
+                                    bz_map,
+                                    mesh_shifts=None):
+    if mesh_shifts is None:
+        mesh_shifts = [False, False, False]
+    return spg.get_BZ_grid_points_by_rotations(
+        grid_point,
+        reciprocal_rotations,
+        mesh,
+        bz_map,
+        is_shift=np.where(mesh_shifts, 1, 0))
+
+def get_grid_address_sent_by_rotations(grid_address, mesh, kpoint_operations):
+    kpt_operation = []
+    for rot in kpoint_operations:
+        rot_address = np.dot(grid_address, rot.T).T % mesh
+        rot_address -= mesh * (rot_address> (mesh/2.0+1e-5))
+
+        if (rot_address == grid).all():
+            kpt_operation.append(rot)
+    return np.array(kpt_operation, dtype=np.int)
+
+
 def get_kgp_index_at_grid(grid, mesh, kpoint_operations, no_sym=False):
     kpt_operation = []
     if no_sym:

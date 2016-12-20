@@ -57,6 +57,11 @@ void kpt_get_neighboring_grid_points(int neighboring_grid_points[],
 				     const int mesh[3],
 				     SPGCONST int bz_grid_address[][3],
 				     const int bz_map[]);
+void kpt_get_grid_points_by_rotations(int rot_grid_points[],
+				      const int address_orig[3],
+				      const MatINT * rot_reciprocal,
+				      const int mesh[3],
+				      const int is_shift[3]);
 void kpt_get_BZ_grid_points_by_rotations(int rot_grid_points[],
 					 const int address_orig[3],
 					 const MatINT * rot_reciprocal,

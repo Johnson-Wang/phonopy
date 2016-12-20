@@ -351,6 +351,16 @@ int spg_get_unique_tetrahedra(int *unique_vertices,
 			      const int dim0,
 			      const int dim1);
 
+/* Rotation operations in reciprocal space ``rot_reciprocal`` are applied */
+/* to a grid address ``address_orig`` and resulting grid points are stored in */
+/* ``rot_grid_points``. Return 0 if failed. */
+int spg_get_grid_points_by_rotations(int rot_grid_points[],
+				     const int address_orig[3],
+				     const int num_rot,
+				     SPGCONST int rot_reciprocal[][3][3],
+				     const int mesh[3],
+				     const int is_shift[3]);
+
 void spg_get_BZ_grid_points_by_rotations(int rot_grid_points[],
 					 const int address_orig[3],
 					 const int num_rot,
