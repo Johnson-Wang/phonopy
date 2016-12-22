@@ -1370,7 +1370,10 @@ def read_integration_weight_from_hdf5_at_grid(mesh, sigma, grid, path = None, is
         print "Warning! path %s does not exist"%path
         return None
     f = h5py.File(path, "r")
-    integration_weight = f['iw'][:]
+    if not 0 in f['iw'].shape:
+        integration_weight = f['iw'][:]
+    else:
+        integration_weight = np.zeros(f['iw'].shape, dtype="double")
     f.close()
     return integration_weight
 
