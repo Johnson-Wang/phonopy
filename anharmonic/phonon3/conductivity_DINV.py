@@ -3,7 +3,7 @@ import sys
 from phonopy.units import THz, kb_J, Angstrom, THzToEv, EV, total_time
 from anharmonic.phonon3.collision import Collision
 from anharmonic.phonon3.conductivity import Conductivity
-from anharmonic.phonon3.triplets import get_grid_points_by_rotations, get_BZ_grid_points_by_rotations
+from anharmonic.phonon3.triplets import get_grid_points_by_rotations
 unit_to_WmK = kb_J / Angstrom ** 3 * ((THz * Angstrom) * THzToEv * EV / kb_J) ** 2  / THz/ (2 * np.pi) # 2pi comes from the definition of tau
 np.seterr(divide="ignore")
 class conductivity_DINV(Conductivity):
@@ -26,7 +26,6 @@ class conductivity_DINV(Conductivity):
                  is_thm=False,
                  filename="ite",
                  lang="C",
-                 is_precondition = True,
                  write_tecplot=False):
         self._pp = interaction
         self._log_level = log_level
@@ -48,7 +47,6 @@ class conductivity_DINV(Conductivity):
         self._scale_bar = 0
         self._itemp = None # index of temperature
         self._temp  = None
-        self._is_precondition = is_precondition
         self._collision = Collision(interaction,
                                    sigmas=self._sigmas,
                                    temperatures=self._temperatures,
@@ -59,11 +57,11 @@ class conductivity_DINV(Conductivity):
                                    read=read_col,
                                    is_tetrahedron_method=is_thm,
                                    cutoff_frequency=self._cutoff_frequency)
+
+
         self._is_write_col = write_col
         self._is_read_col = read_col
-        self._F = None
-        self._b = None
-        self.smrt()
+        self._allocate_values()
         if filename is not None:
             self._filename = filename
         else:
@@ -78,105 +76,7 @@ class conductivity_DINV(Conductivity):
                 self.set_collision()
                 self.run_at_sigma_and_temp()
                 total_time.output()
-        return self
 
-    def smrt(self):
-        num_sigma = len(self._sigmas)
-        num_temp = len(self._temperatures)
-        num_grid = len(self._grid_points)
-        num_band = self._frequencies.shape[-1]
-        self._F= np.zeros((num_sigma, num_grid, num_temp, num_band, 3), dtype="double")
-        self._b = np.zeros((num_grid,num_temp,num_band,3), dtype="double")
-        self._kappa = np.zeros((num_sigma, num_grid, num_temp, num_band, 6), dtype="double")
-        self._gv = np.zeros((len(self._grid_points),
-                             num_band,
-                             3), dtype='double')
-        self._collision_out = np.zeros((num_sigma, num_grid, num_temp, num_band), dtype="double")
-        self._gamma = np.zeros((num_sigma, num_grid, num_temp, num_band), dtype="double")
-        total_time.reset()
-        self.run_smrt_sigma_adaption()
-        total_time.output()
-        if self._is_read_col:
-            self._pp.release_amplitude_all()
-
-    @total_time.set_main
-    @total_time.timeit
-    def run_smrt_sigma_adaption(self):
-        asigma_step = 0
-        while asigma_step <= self._max_asigma_step:
-            if self._collision.get_read_collision() and self._is_adaptive_sigma:
-                self._collision.set_write_collision(True)
-            if asigma_step > 1:
-                if asigma_step > 2:
-                    self._gamma_ppp = self._gamma_pp.copy()
-                self._gamma_pp = self._gamma_prev.copy()
-            self._gamma_prev = self._collision._gamma_all.copy()
-            for s in range(len(self._sigmas)):
-                if (self._rkappa[s] < self._diff_kappa).all():
-                    continue
-                self.set_sigma(s)
-                for t in range(len(self._temperatures)):
-                    if (self._rkappa[s,t] < self._diff_kappa).all():
-                        continue
-                    if asigma_step > 1:
-                        print "Relative kappa difference %.2e" %self._rkappa[s,t].max()
-                    self.set_temperature(t)
-                    self.set_collision()
-                    if self._log_level:
-                        if asigma_step == 0:
-                            print "######Kappa calculation within SMRT at constant sigma=%s, temp=%.2f #######" %(self._sigma, self._temp)
-                        else:
-                            print "######Kappa calculation within SMRT with sigma-adaption at temp=%.2f, (%d/%d) #######" %\
-                                  (self._temp, asigma_step, self._max_asigma_step)
-                    self.print_calculation_progress_header()
-                    for g, grid_point in enumerate(self._grid_points):
-                        self._collision.set_grid(grid_point)
-                        self._collision.set_phonons_triplets()
-                        self._collision.set_grid_points_occupation()
-                        self._collision.reduce_triplets()
-                        if asigma_step > 0:
-                            if asigma_step > 2:
-                                self._collision.set_asigma(self._gamma_pp[s, :, t], self._gamma_ppp[s, :, t])
-                                # self._collision.set_asigma()
-                            else:
-                                self._collision.set_asigma()
-                        self._collision.set_integration_weights()
-                        self._collision.run_interaction_at_grid_point(self._collision.get_interaction_skip())
-                        # self._collision.run_interaction_at_grid_point()
-
-                        self._collision.run()
-                        self.assign_perturbation_at_grid_point(s, g, t)
-                        self.print_calculation_progress(g)
-                    if asigma_step == 0 and (not self._is_read_col):
-                        self._pp.write_amplitude_all()
-                    if not self._collision.get_is_dispersed():
-                        self._collision.write_collision_all(log_level=self._log_level, is_adaptive_sigma=self._is_adaptive_sigma)
-                self.set_kappa_at_sigma(s)
-            self.print_kappa()
-            asigma_step += 1
-            if (self._rkappa < self._diff_kappa).all():
-                print "The sigma iteration process has converged."
-                break
-
-        self._collision.set_is_on_iteration()
-        if self._collision.get_write_collision():
-            self._collision.set_write_collision(False)
-            self._collision.set_read_collision(True)
-
-    def assign_perturbation_at_grid_point(self, isigma, igrid, itemp):
-        grid_point = self._grid_points[igrid]
-        n = self._collision.get_occupation()[grid_point, itemp]
-        is_pass = self._frequencies[igrid] < self._cutoff_frequency
-        collision_out = self._collision.get_collision_out()
-        out_reverse=np.where(is_pass,0, 1/collision_out)
-        freqs = self._frequencies[igrid]
-        self._set_gv(igrid)
-        nn1 = n * (n + 1)
-        fnn1 = freqs * nn1
-        self._b[igrid,itemp] = fnn1[:,np.newaxis] * self._gv[igrid] / self._temp ** 2
-        self._F[isigma,igrid,itemp]= out_reverse[:,np.newaxis] * self._b[igrid,itemp]
-        self._collision_out[isigma,igrid,itemp] = self._collision.get_collision_out()
-        self._gamma[isigma,igrid,itemp] = self._collision.get_collision_out() * np.where(is_pass, 0, 1 / nn1) / 2.
 
     @total_time.timeit
     def set_collision(self):
@@ -185,6 +85,21 @@ class conductivity_DINV(Conductivity):
         self._collision.set_grids(self._grid_points)
         if self._collision.get_read_collision() and not self._collision.get_is_dispersed():
             self._collision.read_collision_all(log_level=self._log_level, is_adaptive_sigma=self._is_adaptive_sigma)
+
+    def _allocate_values(self):
+        self.set_rot_grid_points()
+        nqpoint, nband = self._frequencies.shape
+        num_mesh_points = np.prod(self._mesh)
+        self._collision_total = np.zeros((len(self._sigmas),
+                                          len(self._temperatures),
+                                          num_mesh_points,
+                                          nband,
+                                          num_mesh_points,
+                                          nband), dtype='double')
+        self._gv = np.zeros((len(self._grid_points),nband,3), dtype='double')
+        self._F= np.zeros((len(self._sigmas), num_mesh_points, len(self._temperatures), nband, 3), dtype="double")
+        self._b = np.zeros((num_mesh_points, len(self._temperatures), nband, 3), dtype="double")
+        self._kappa = np.zeros((len(self._sigmas), num_mesh_points, len(self._temperatures), nband, 6), dtype="double")
 
     def get_mode_heat_capacities(self):
         cv = []
@@ -220,8 +135,6 @@ class conductivity_DINV(Conductivity):
     @total_time.timeit
     def run_at_sigma_and_temp(self): # sigma and temperature
         "Run each single iteration, all terminology follows the description in wiki/Conjugate_gradient_method"
-        t = self._itemp
-        s = self._isigma
         if self._log_level:
             if self._sigma:
                 print "######Perturbation flow for the next iterative step at sigma=%s, t=%f#######"\
@@ -229,55 +142,39 @@ class conductivity_DINV(Conductivity):
             else:
                 print "######Perturbation flow for the next iterative step with tetrahedron method#######"
             self.print_calculation_progress_header()
-        for i, grid_point in enumerate(self._grid_points):
-            self._collision.calculate_collision(grid_point)
-            #calculating scattering rate
+        nqpoint, nband = self._frequencies.shape
+        num_mesh_points = np.prod(self._mesh)
+        for i, ir_gp in enumerate(self._ir_grid_points):
+
+            collision_total = np.zeros((num_mesh_points, nband, nband), dtype='double')
+            self._collision.calculate_collision(ir_gp)
+            col = self._collision._collision_in
+            _, gp2tp = np.unique(self._pp._second_mappings[i], return_inverse=True)
+            for j, index in enumerate(gp2tp):
+                collision_total[j] = col[index]
+                if ir_gp == j:
+                    collision_total[j] += np.diag(self._collision._collision_out)
+            multi = (self._rot_grid_points[:, ir_gp] == ir_gp).sum()
+            self._set_gv(i)
+            n = self._collision.get_occupation()[ir_gp, self._itemp]
+            freqs = self._frequencies[i]
+            nn1 = n * (n + 1)
+            fnn1 = freqs * nn1
+            b = fnn1[:,np.newaxis] * self._gv[i] / self._temp ** 2
+            for j, r in enumerate(self._rotations_cartesian):
+                gp_r = self._rot_grid_points[j, ir_gp]
+                self._collision_total[self._isigma, self._itemp, gp_r, :, self._rot_grid_points[j]] += \
+                    collision_total / multi
+                self._b[gp_r, self._itemp] += np.dot(b, r.T) / multi
+
+                # for k in range(num_mesh_points):
+                #     colmat_elem = collision_total[k]
+                #     colmat_elem = colmat_elem.copy() / multi
+                #     gp_c = self._rot_grid_points[j, k]
+                #     self._collision_total[self._isigma, self._itemp, gp_r, :, gp_c, :] += colmat_elem
             self.print_calculation_progress(i)
 
-    def broadcast_collision_matrix(self):
-        t = self._itemp
-        s = self._isigma
-        self._rot_grid_points = np.zeros(
-            (len(self._ir_grid_points), len(self._kpoint_operations)),
-            dtype='intc')
-        self._rot_BZ_grid_points = np.zeros(
-            (len(self._ir_grid_points), len(self._kpoint_operations)),
-            dtype='intc')
 
-        for i, ir_gp in enumerate(self._ir_grid_points):
-            self._rot_grid_points[i] = get_grid_points_by_rotations(
-                self._grid_address[ir_gp],
-                self._kpoint_operations,
-                self._mesh)
-            self._rot_BZ_grid_points[i] = get_BZ_grid_points_by_rotations(
-                self._grid_address[ir_gp],
-                self._kpoint_operations,
-                self._mesh,
-                self._pp.get_bz_map())
-        nqpoint, nband = self._frequencies.shape
-        self._collision_total = np.zeros((nqpoint, nband, nqpoint, nband), dtype='double')
-        grid_map = self._pp.get_grid_mapping()
-        bz_to_pp_map = self._pp.get_bz_to_pp_map()
-        bz_to_irred_map = grid_map[bz_to_pp_map]
-        for i, grid_point in enumerate(self._grid_points):
-            self._collision.calculate_collision(grid_point)
-            col = self._collision._collision_in + self._collision._collision_out
-            for j in self._pp._second_mappings[i]:
-                self._collision_total[grid_point, :, j] = col
-            equiv_pos = np.where(bz_to_irred_map == grid_point)[0]
-            self._rot_mappings
-            self._mappings
-
-
-
-    def get_total_rotation(self):
-        triplet1 = self._collision._grid_point_triplets[:,1]
-        triplet1_pp = self._bz_to_pp_map[triplet1]
-        num_rots = len(self._collision._kpg_at_q_index) # kpoint group at q
-        inv_rot = self._kpoint_group_inv_map[self._rot_mappings[triplet1_pp]]
-        r1dotr2_inv = self._kpoint_group_sum_map[self._collision._kpg_at_q_index][:,inv_rot]
-        a1 = self._kpoint_operations[r1dotr2_inv].sum(axis=0)
-        self._rot1_sums = a1 / float(num_rots)
 
     def set_kappa(self):
         for i,s in enumerate(self._sigmas):
@@ -293,21 +190,36 @@ class conductivity_DINV(Conductivity):
         self.set_kappa_at_s_c(s)
 
     def set_kappa_at_s_c(self, s):
-        import anharmonic._phono3py as phono3c
-        kappa = np.zeros_like(self._kappa[s])
-        rec_lat = np.linalg.inv(self._primitive.get_cell())
+        kappa = self._kappa[s]
+        num_mesh_point = np.prod(self._mesh)
+        num_band = self._frequencies.shape[-1]
         for t, temp in enumerate(self._temperatures):
-            gouterm_temp = np.zeros((self._frequencies.shape[0], self._frequencies.shape[1], 6), dtype="double")
-            phono3c.phonon_gb33_multiply_dvector_gb3_dvector_gb3(gouterm_temp,
-                                                                 self._b[:,t].copy(),
-                                                                 self._F[s,:,t].copy(),
-                                                                 np.intc(self._irr_index_mapping).copy(),
-                                                                 np.intc(self._kpoint_operations[self._rot_mappings]).copy(),
-                                                                 rec_lat.copy())
-            kappa[:,t] = gouterm_temp * temp ** 2
-        kappa *= self._kappa_factor / np.prod(self._mesh)
-        kappa_max = kappa.sum(axis=(0,2)).max(axis=-1)
-        rkappa = np.sum(np.abs(kappa - self._kappa[s]), axis=(0, 2)) # over qpoints and nbands
-        for i in range(6):
-            self._rkappa[s, :, i] = rkappa[:, i] /  kappa_max
-        self._kappa[s] = kappa
+            self._set_inv_reducible_collision_matrix(s, t)
+            inv_collision = self._collision_total[s,t].reshape(num_mesh_point, num_band, num_mesh_point*num_band)
+            # collision = self._collision_total[s, t].swapaxes(0,1).swapaxes(2,3)
+            # np.savetxt("invcollision.dat", collision.reshape(-1, num_band*num_mesh_point))
+            self._F[s, :, t] = np.dot(inv_collision, self._b[:, t].reshape(-1,3))
+            for i in range(3):
+                for j in range(i, 3):
+                    direct = i if i==j else (j-i) + 2 * (i + 1)
+                    bf = self._b[:, t,:, i] * self._F[s, :, t, :, j]
+                    if i != j:
+                        bf2 = self._b[:, t, :, j] * self._F[s, :, t, :, i]
+                        bf = (bf + bf2) / 2
+                    kappa[:, t,:, direct] = bf * temp ** 2 * self._kappa_factor / np.prod(self._mesh)
+
+
+    def _set_inv_reducible_collision_matrix(self, i_sigma, i_temp):
+        num_mesh_points = np.prod(self._mesh)
+        num_band = self._primitive.get_number_of_atoms() * 3
+        col_mat = self._collision_total[i_sigma, i_temp].reshape(
+            num_mesh_points * num_band, num_mesh_points * num_band)
+        w, col_mat[:] = np.linalg.eigh(col_mat)
+        v = col_mat
+        e = np.zeros(len(w), dtype='double')
+        for l, val in enumerate(w):
+            if val > 1e-6:
+                e[l] = 1 / np.sqrt(val)
+        v[:] = e * v
+        v[:] = np.dot(v, v.T) # inv_col
+        self._collision_eigenvalues = w

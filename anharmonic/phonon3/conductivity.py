@@ -6,7 +6,8 @@ from phonopy.harmonic.force_constants import similarity_transformation
 from phonopy.units import THzToEv, EV, THz, Angstrom, kb_J
 from phonopy.phonon.thermal_properties import mode_cv as get_mode_cv
 from anharmonic.phonon3.triplets import get_grid_address, reduce_grid_points, get_ir_grid_points,\
-    from_coarse_to_dense_grid_points, get_kpoint_group, get_group_summation, get_group_inversion
+    from_coarse_to_dense_grid_points, get_kpoint_group, get_group_summation, get_group_inversion, \
+    get_grid_points_by_rotations
 from anharmonic.other.isotope import CollisionIso
 from phonopy.structure.tetrahedron_method import TetrahedronMethod, TriagonalMethod
 unit_to_WmK = ((THz * Angstrom) ** 2 / (Angstrom ** 3) * EV / THz /
@@ -213,6 +214,18 @@ class Conductivity:
                         np.where(finite_t, self._temperatures, 10000),
                         f * THzToEv), 0)
         return cv
+
+    def set_rot_grid_points(self):
+        num_rot = len(self._kpoint_operations)
+        num_mesh_points = np.prod(self._mesh)
+        self._rot_grid_points = np.zeros(
+            (num_rot, num_mesh_points), dtype='intc')
+
+        for i in range(num_mesh_points):
+            self._rot_grid_points[:, i] = get_grid_points_by_rotations(
+                self._grid_address[i],
+                self._kpoint_operations,
+                self._mesh)
 
     def _set_grid_properties(self, grid_points):
         self._grid_address = self._pp.get_grid_address()

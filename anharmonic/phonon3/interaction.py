@@ -7,8 +7,7 @@ from phonopy.units import VaspToTHz, total_time
 from anharmonic.phonon3.real_to_reciprocal import RealToReciprocal
 from anharmonic.phonon3.reciprocal_to_normal import ReciprocalToNormal
 from anharmonic.phonon3.triplets import get_triplets_at_q_crude, get_BZ_triplets_at_q, get_nosym_triplets_at_q, \
-    get_kgp_index_at_grid, get_kpoint_group, reduce_triplets_by_permutation_symmetry, get_bz_grid_address, \
-    reduce_pairs_by_permutation_symmetry
+     get_kpoint_group, reduce_triplets_by_permutation_symmetry, get_bz_grid_address, get_triplets_at_q
 from anharmonic.file_IO import write_triplets_to_hdf5, read_amplitude_from_hdf5_all, read_amplitude_from_hdf5_at_grid,\
     write_amplitude_to_hdf5_at_grid, write_amplitude_to_hdf5_all
 from phonopy.phonon.group_velocity import degenerate_sets
@@ -356,6 +355,11 @@ class Interaction:
                                                  self._triplets_sequence[self._i].astype("byte"))
                 self._triplets_done[undone_num] = True
 
+        ##Added for my own purpose, please delete it
+
+        # is_anyq_on_bound = (np.abs(self._grid_address[self._triplets_at_q]) > 0.4 * self._mesh).any(axis=(1,2))
+        # self._interaction_strength[np.where(is_anyq_on_bound)] = 0.
+
     # @total_time.timeit
     def set_phonons(self, grid_points=None, lang = "C"):
         if lang == "C":
@@ -557,6 +561,7 @@ class Interaction:
                  bz_grid_address,
                  bz_map)=\
                     get_BZ_triplets_at_q(grid_point, self._mesh, reciprocal_lattice, grid_address, grid_map)
+
                 if self._is_dispersed:
                     (unique_triplet_nums,
                      triplets_mappings,

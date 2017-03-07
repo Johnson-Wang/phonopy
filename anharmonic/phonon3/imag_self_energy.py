@@ -194,10 +194,10 @@ class ImagSelfEnergy:
                                      self._cutoff_frequency)
 
     def set_integration_weights(self, scattering_event_class=None, is_triplet_symmetry=True):
-        # if self._fpoints is None:
-        #     f_points = self._frequencies[self._grid_point][self._band_indices]
-        # else:
-        f_points = self._fpoints
+        if self._fpoints is None:
+            f_points = self._frequencies[self._grid_point][self._band_indices]
+        else:
+            f_points = self._fpoints
         num_band = self._frequencies.shape[-1]
         if self._nu is not None:
             self._g = np.zeros(

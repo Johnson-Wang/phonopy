@@ -106,7 +106,6 @@ class Collision():
         self._gamma_all = np.zeros_like(self._collision_out_all)
         self._n_done = np.zeros((num_grids_all, num_temp), dtype="bool")
 
-
     def set_grid(self, grid_point):
         if grid_point is None:
             self._grid_point = None

@@ -7,6 +7,7 @@ from anharmonic.phonon3.interaction import Interaction
 from anharmonic.phonon3.conductivity_RTA import conductivity_RTA
 from anharmonic.phonon3.conductivity_ITE import conductivity_ITE
 from anharmonic.phonon3.conductivity_ITE_CG import conductivity_ITE_CG
+from anharmonic.phonon3.conductivity_DINV import conductivity_DINV
 from anharmonic.phonon3.jointDOS import JointDos
 from anharmonic.phonon3.gruneisen import Gruneisen
 from anharmonic.file_IO import write_kappa_to_hdf5, write_iso_scattering_to_hdf5, write_joint_dos
@@ -242,7 +243,6 @@ class Phono3py:
                 for i, t in enumerate(temperature):
                     decay.set_temperature(t)
                     decay.get_decay_channels(filename = filename)
-
 
 
     def get_linewidth(self,
@@ -676,6 +676,55 @@ class Phono3py:
                                 weight=bis._grid_weights,
                                 sigma=sigma,
                                 filename=bis._filename)
+        self._gamma=bis._gamma
+        self._kappa=bis._kappa
+        bis.print_kappa()
+        # bis.print_kappa_rta()
+
+    def get_kappa_dinv(self,
+                      sigmas=[0.2],
+                      temperatures=None,
+                      grid_points=None,
+                      no_kappa_stars=False,
+                      write_gamma=False,
+                      read_gamma=False,
+                      read_col=False,
+                      write_col=False,
+                      filename="dinv"):
+        bis=conductivity_DINV(self._interaction, #Iterative Boltzmann solutions
+                             symmetry=self._primitive_symmetry,
+                             sigmas=sigmas,
+                             grid_points = grid_points,
+                             temperatures=temperatures,
+                             adaptive_sigma_step = self._asigma_step,
+                             no_kappa_stars=no_kappa_stars,
+                             mass_variances=self._mass_variances,
+                             length=self._length,
+                             log_level=self._log_level,
+                             read_gamma = read_gamma,
+                             write_gamma = write_gamma,
+                             read_col = read_col,
+                             write_col=write_col,
+                             filename=filename)
+
+        bis.run()
+        bis.set_kappa()
+
+        print "Final thermal conductivity (W/mK)"
+        # for s, sigma in enumerate(sigmas):
+        #     bis.set_equivalent_gamma_at_sigma(s)
+        #     bis.set_kappa_at_sigma(s)
+        #     write_kappa_to_hdf5(bis._gamma[s],
+        #                         bis._temperatures,
+        #                         bis._mesh,
+        #                         frequency=bis._frequencies,
+        #                         group_velocity=bis._gv,
+        #                         heat_capacity=bis.get_mode_heat_capacities(),
+        #                         kappa=bis._kappa[s],
+        #                         qpoint=bis._qpoints,
+        #                         weight=bis._grid_weights,
+        #                         sigma=sigma,
+        #                         filename=bis._filename)
         self._gamma=bis._gamma
         self._kappa=bis._kappa
         bis.print_kappa()

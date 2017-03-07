@@ -692,7 +692,6 @@ static int get_ir_mesh_with_rot_map(int grid_address[][3],
 	for (l = 0; l < point_symmetry->size; l++) {
 	  mat_multiply_matrix_vector_i3(grid_address_rot,
 					point_symmetry->rot[l],	grid_address_double);
-	  get_vector_modulo(grid_address_rot, mesh_double);
 	  grid_point_rot = get_grid_point_double_mesh(grid_address_rot, mesh);
 
 	  if (grid_point_rot > -1) { /* Invalid if even --> odd or odd --> even */
@@ -757,7 +756,6 @@ get_ir_mesh_openmp_with_rot_map(int grid_address[][3],
 	for (l = 0; l < point_symmetry->size; l++) {
 	  mat_multiply_matrix_vector_i3(grid_address_rot,
 					point_symmetry->rot[l],	grid_address_double);
-	  get_vector_modulo(grid_address_rot, mesh_double);
 	  grid_point_rot = get_grid_point_double_mesh(grid_address_rot, mesh);
 
 	  if (grid_point_rot > -1) { /* Invalid if even --> odd or odd --> even */
@@ -831,7 +829,6 @@ static int get_ir_reciprocal_mesh(int grid_address[][3],
 	for (l = 0; l < point_symmetry->size; l++) {
 	  mat_multiply_matrix_vector_i3(grid_address_rot,
 					point_symmetry->rot[l],	grid_address_double);
-	  get_vector_modulo(grid_address_rot, mesh_double);
 	  grid_point_rot = get_grid_point_double_mesh(grid_address_rot, mesh);
 
 	  if (grid_point_rot > -1) { /* Invalid if even --> odd or odd --> even */
@@ -892,7 +889,6 @@ get_ir_reciprocal_mesh_openmp(int grid_address[][3],
 	for (l = 0; l < point_symmetry->size; l++) {
 	  mat_multiply_matrix_vector_i3(grid_address_rot,
 					point_symmetry->rot[l],	grid_address_double);
-	  get_vector_modulo(grid_address_rot, mesh_double);
 	  grid_point_rot = get_grid_point_double_mesh(grid_address_rot, mesh);
 
 	  if (grid_point_rot > -1) { /* Invalid if even --> odd or odd --> even */
@@ -978,7 +974,6 @@ static int relocate_BZ_grid_address(int bz_grid_address[][3],
 	    grid_address[i][k] + search_space[j][k] * mesh[k];
 	  bz_address_double[k] = bz_grid_address[gp][k] * 2 + is_shift[k];
 	}
-	get_vector_modulo(bz_address_double, bzmesh_double);
 	bzgp = get_grid_point_double_mesh(bz_address_double, bzmesh);
 	bz_map[bzgp] = gp;
 	if (j != min_index) {
@@ -1014,10 +1009,8 @@ void kpt_get_neighboring_grid_points(int neighboring_grid_points[],
 			   relative_grid_address[i][j]) * 2;
       bz_address_double[j] = address_double[j];
     }
-    get_vector_modulo(bz_address_double, bzmesh_double);
     bz_gp = bz_map[get_grid_point_double_mesh(bz_address_double, bzmesh)];
     if (bz_gp == -1) {
-      get_vector_modulo(address_double, mesh_double);
       neighboring_grid_points[i] =
 	get_grid_point_double_mesh(address_double, mesh);
     } else {
@@ -1209,7 +1202,6 @@ static int get_ir_triplets_at_q(int weights[],
     for (j = 0; j < 3; j++) { /* q'' */
       address_double2[j] = - address_double0[j] - address_double1[j];
     }
-    get_vector_modulo(address_double2, mesh_double);
     third_q[ir_addresses[i]] = get_grid_point_double_mesh(address_double2, mesh);
   }
 
@@ -1368,12 +1360,10 @@ int  reduce_triplets_permute_sym(int triplet_mappings[],
 	      {
 	        grid_point_to_address_double(vtmp, q1, mesh, is_shift);
 	        mat_multiply_matrix_vector_i3(vtmp, first_rotation[q0], vtmp);
-	        get_vector_modulo(vtmp, mesh_double);
 	        q1 = get_grid_point_double_mesh(vtmp, mesh);
 	
 	        grid_point_to_address_double(vtmp, q2, mesh, is_shift);
 	        mat_multiply_matrix_vector_i3(vtmp, first_rotation[q0], vtmp);
-	        get_vector_modulo(vtmp, mesh_double);
 	        q2 = get_grid_point_double_mesh(vtmp, mesh);
 	      }
 	      else // In case of no matches
@@ -1472,7 +1462,6 @@ int  reduce_pairs_permute_sym(int pair_mappings[],
 	      i_prime = mat_index_from_Iarray(grid_points, num_grid, first_mapping[q0]);
 	      grid_point_to_address_double(vtmp, q1, mesh, is_shift);
 	      mat_multiply_matrix_vector_i3(vtmp, first_rotation[q0], vtmp);
-	      get_vector_modulo(vtmp, mesh_double);
 	      q1 = get_grid_point_double_mesh(vtmp, mesh);
       }
       else
@@ -1559,7 +1548,6 @@ static void set_grid_triplets_at_q(int triplets[][3],
     }
 
     for (j = 0; j < 3; j++) {
-      get_vector_modulo(address_double[j], ex_mesh_double);
       triplets[num_ir][j] = get_grid_point_double_mesh(address_double[j], ex_mesh);
     }
     
@@ -1604,6 +1592,7 @@ static int get_grid_point_double_mesh(const int address_double[3],
       address[i] = (address_double[i] - 1) / 2;
     }
   }
+  get_vector_modulo(address, mesh);
   return get_grid_point_single_mesh(address, mesh);
 }
 
@@ -1697,7 +1686,6 @@ static int get_BZ_triplets_at_q(int triplets[][3],
       for (k = 0; k < 3; k++) {
 	bz_address_double[k] = bz_address[j][k] * 2;
       }
-      get_vector_modulo(bz_address_double, bzmesh_double);
       triplets[i][j] =
 	bz_map[get_grid_point_double_mesh(bz_address_double, bzmesh)];
     }
@@ -1737,7 +1725,6 @@ static int get_third_q_of_triplets_at_q(int bz_address[3][3],
 	bz_address_double[j] += bzmesh_double[j];
       }
     }
-    get_vector_modulo(bz_address_double, bzmesh_double);
     bzgp[i] = bz_map[get_grid_point_double_mesh(bz_address_double, bzmesh)];
   }
 

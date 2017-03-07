@@ -211,6 +211,9 @@ parser.add_option("--ite", "--iterative", dest="is_ite",
 parser.add_option("--ite_cg", "--iterative_conjugate_gradient", dest="is_ite_cg",
                   action="store_true",
                   help="Solve BTE iteratively using the conjugate gradient method")
+parser.add_option("--dinv", "--direct_inverse", dest="is_dinv",
+                  action="store_true",
+                  help="Solve BTE directly with explicit inversion")
 parser.add_option("--ise", "--image_self_energy", dest="is_ise",
                   action="store_true",
                   help="Get the image self energy")
@@ -557,6 +560,8 @@ elif settings.get_is_ite():
     run_mode = "bteite"
 elif settings.get_is_ite_cg():
     run_mode = "bteite_cg"
+elif options.is_dinv:
+    run_mode = "dinv"
 elif  settings.get_is_linewidth():
     run_mode = "linewidth"
 elif settings.get_is_ise():
@@ -1203,6 +1208,21 @@ elif run_mode=="bteite_cg":
         max_ite = settings.get_max_ite(),
         no_kappa_stars=settings.get_no_kappa_stars(),
         diff_kappa = settings.get_diff_kappa(),
+        write_gamma=settings.get_write_gamma(),
+        read_gamma=settings.get_read_gamma(),
+        read_col = options.read_col,
+        write_col = options.write_col,
+        filename=options.output_filename)
+elif run_mode=="dinv":
+    if settings.get_min_temperature()<=0:
+        print_error_message("Error: The direct method can only be applied for T>0K")
+        print_end()
+        sys.exit(1)
+    phono3py.get_kappa_dinv(
+        sigmas=multiple_sigmas,
+        temperatures=temperatures,
+        grid_points=grid_points,
+        no_kappa_stars=settings.get_no_kappa_stars(),
         write_gamma=settings.get_write_gamma(),
         read_gamma=settings.get_read_gamma(),
         read_col = options.read_col,
