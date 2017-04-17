@@ -956,33 +956,59 @@ class JointDOS:
             log_level=self._log_level)
 
     def run(self, grid_points):
-        for gp in grid_points:
-            self._jdos.set_grid_point(gp)
-
-            if self._log_level:
-                weights = self._jdos.get_triplets_at_q()[1]
-                print "--------------------------------- Joint DOS ---------------------------------"
-                print "Grid point: %d" % gp
-                print "Number of ir-triplets:",
-                print "%d / %d" % (len(weights), weights.sum())
-                adrs = self._jdos.get_grid_address()[gp]
-                q = adrs.astype('double') / self._mesh
-                print "q-point:", q
-                print "Phonon frequency:"
-                frequencies = self._jdos.get_phonons()[0]
-                print frequencies[gp]
-
-            if self._sigmas:
-                for sigma in self._sigmas:
-                    if sigma is None:
-                        print "Tetrahedron method"
-                    else:
-                        print "Sigma:", sigma
-                    self._jdos.set_sigma(sigma)
-                    self._jdos.run()
-                    self._write(gp, sigma=sigma)
+        if grid_points is None:
+            self._jdos.set_grid_points() # Calculating phase space
+            grid_points = self._jdos._grid_points
+            num_band = self._primitive.get_number_of_atoms() * 3
+            if self._sigmas is not None:
+                if self._temperatures is not None:
+                    self._phase_space = np.zeros((len(self._sigmas),
+                                                  len(grid_points),
+                                                  len(self._temperatures),
+                                                  num_band,
+                                                  2), dtype='double')
+                else:
+                    self._phase_space = np.zeros((len(self._sigmas),
+                                                  len(grid_points),
+                                                  num_band,
+                                                  2), dtype='double')
+                for i, gp in enumerate(grid_points):
+                    self._jdos.set_grid_point(gp)
+                    for j, sigma in enumerate(self._sigmas):
+                        self._jdos.set_sigma(sigma)
+                        self._jdos.run(is_band_freq=True)
+                        self._phase_space[j, i] = self._jdos.get_joint_dos()
+                self._write_phase_space()
             else:
                 print "sigma or tetrahedron method has to be set."
+        else:
+            for gp in grid_points:
+                self._jdos.set_grid_point(gp)
+
+                if self._log_level:
+                    weights = self._jdos.get_triplets_at_q()[1]
+                    print "--------------------------------- Joint DOS ---------------------------------"
+                    print "Grid point: %d" % gp
+                    print "Number of ir-triplets:",
+                    print "%d / %d" % (len(weights), weights.sum())
+                    adrs = self._jdos.get_grid_address()[gp]
+                    q = adrs.astype('double') / self._mesh
+                    print "q-point:", q
+                    print "Phonon frequency:"
+                    frequencies = self._jdos.get_phonons()[0]
+                    print frequencies[gp]
+
+                if self._sigmas:
+                    for sigma in self._sigmas:
+                        if sigma is None:
+                            print "Tetrahedron method"
+                        else:
+                            print "Sigma:", sigma
+                        self._jdos.set_sigma(sigma)
+                        self._jdos.run()
+                        self._write(gp, sigma=sigma)
+                else:
+                    print "sigma or tetrahedron method has to be set."
 
     def _write(self, gp, sigma=None):
         write_joint_dos(gp,
@@ -993,6 +1019,23 @@ class JointDOS:
                         temperatures=self._temperatures,
                         filename=self._filename,
                         is_nosym=self._is_nosym)
+
+    def _write_phase_space(self):
+        jdos = self._jdos
+        frequencies = jdos._frequencies[jdos._grid_points]
+        phase_space = self._phase_space
+        import h5py
+        for i, sigma in enumerate(self._sigmas):
+            if sigma == None:
+                filename = "phase_space-sthm.hdf5"
+            else:
+                filename = "phase_space-s%.2f.hdf5"%sigma
+            f = h5py.File(filename, "w")
+            f.create_dataset('phase_space', data=phase_space[i])
+            f.create_dataset('frequency', data=frequencies)
+            if self._temperatures is not None:
+                f.create_dataset('temperature', self._temperatures)
+            f.close()
 
 
 def get_gruneisen_parameters(fc2,

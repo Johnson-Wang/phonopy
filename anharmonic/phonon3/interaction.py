@@ -356,9 +356,13 @@ class Interaction:
                 self._triplets_done[undone_num] = True
 
         ##Added for my own purpose, please delete it
-
-        # is_anyq_on_bound = (np.abs(self._grid_address[self._triplets_at_q]) > 0.4 * self._mesh).any(axis=(1,2))
-        # self._interaction_strength[np.where(is_anyq_on_bound)] = 0.
+        self._criteria = 0.55
+        self._lcriteria = 0.1
+        is_anyq_on_bound = (np.abs(self._grid_address[self._triplets_at_q]) > self._criteria * self._mesh).any(axis=(1,2))
+        is_uprocess = np.any(self._grid_address[self._triplets_at_q].sum(axis=1)!=0, axis=1)
+        is_anyq_at_center = (np.abs(self._grid_address[self._triplets_at_q]) < self._lcriteria * self._mesh).any(axis=(1,2))
+        self._interaction_strength[np.where(np.logical_and(is_uprocess, is_anyq_at_center))] = 0.
+        self._interaction_strength[np.where(is_anyq_on_bound)] = 0.
 
     # @total_time.timeit
     def set_phonons(self, grid_points=None, lang = "C"):

@@ -6,6 +6,7 @@ from anharmonic.phonon3.triplets import get_triplets_at_q, get_nosym_triplets_at
 from phonopy.harmonic.dynamical_matrix import DynamicalMatrix, DynamicalMatrixNAC
 from anharmonic.phonon3.interaction import set_phonon_c
 from phonopy.structure.tetrahedron_method import TetrahedronMethod
+from anharmonic.phonon3.triplets import get_ir_grid_points
 
 
 class JointDos:
@@ -68,10 +69,26 @@ class JointDos:
         self._joint_dos = None
         self._frequency_points = None
 
-    def run(self):
+    def set_grid_points(self):
+        if self._is_nosym: # All grid points
+            self._grid_points = np.arange(np.prod(self._mesh),
+                                           dtype='intc')
+            self._grid_weights = np.ones(len(self.grid_points), dtype='intc')
+
+        else: # Automatic sampling
+            (grid_points,
+             grid_weights,
+             grid_address) = get_ir_grid_points(
+                self._mesh,
+                self._primitive,
+                mesh_shifts=[False, False, False])
+            self._grid_points = grid_points
+            self._grid_weights = grid_weights
+
+    def run(self, is_band_freq=False):
         try:
             import anharmonic._phono3py as phono3c
-            self._run_c()
+            self._run_c(is_band_freq)
         except ImportError:
             print "Joint density of states in python is not implemented."
             return None, None
@@ -125,27 +142,30 @@ class JointDos:
     def get_bz_map(self):
         return self._bz_map
 
-    def _run_c(self, lang='C'):
+    def _run_c(self, is_band_freq = False, lang='C'):
         if self._sigma is None:
             if lang == 'C':
-                self._run_c_with_g()
+                self._run_c_with_g(is_band_freq)
             else:
                 if self._temperatures is not None:
                     print "JDOS with phonon occupation numbers doesn't work",
                     print "in this option."
-                self._run_py_tetrahedron_method()
+                self._run_py_tetrahedron_method(is_band_freq)
         else:
-            self._run_c_with_g()
+            self._run_c_with_g(is_band_freq)
 
-    def _run_c_with_g(self):
+    def _run_c_with_g(self, is_band_freq=False):
         self.set_phonons(self._triplets_at_q.ravel())
-        if self._sigma is None:
-            f_max = np.max(self._frequencies) * 2
+        if is_band_freq == True:
+            self._frequency_points = self._frequencies[self._grid_point]
         else:
-            f_max = np.max(self._frequencies) * 2 + self._sigma * 4
-        f_max *= 1.005
-        f_min = 0
-        self._set_frequency_points(f_min, f_max)
+            if self._sigma is None:
+                f_max = np.max(self._frequencies) * 2
+            else:
+                f_max = np.max(self._frequencies) * 2 + self._sigma * 4
+            f_max *= 1.005
+            f_min = 0
+            self._set_frequency_points(f_min, f_max)
 
         num_freq_points = len(self._frequency_points)
         num_mesh = np.prod(self._mesh)
@@ -192,7 +212,7 @@ class JointDos:
 
         self._joint_dos = jdos / num_mesh
 
-    def _run_py_tetrahedron_method(self):
+    def _run_py_tetrahedron_method(self, is_band_freq=False):
         thm = TetrahedronMethod(self._reciprocal_lattice, mesh=self._mesh)
         self._vertices = get_tetrahedra_vertices(
             thm.get_tetrahedra(),
@@ -200,11 +220,13 @@ class JointDos:
             self._triplets_at_q,
             self._grid_address)
         self.set_phonons(self._vertices.ravel())
-        f_max = np.max(self._frequencies) * 2
-        f_max *= 1.005
-        f_min = 0
-        self._set_frequency_points(f_min, f_max)
-
+        if is_band_freq:
+            self._frequency_points = self._frequencies[self._grid_point]
+        else:
+            f_max = np.max(self._frequencies) * 2
+            f_max *= 1.005
+            f_min = 0
+            self._set_frequency_points(f_min, f_max)
         num_freq_points = len(self._frequency_points)
         jdos = np.zeros((num_freq_points, 2), dtype='double')
         for vertices, w in zip(self._vertices, self._weights_at_q):

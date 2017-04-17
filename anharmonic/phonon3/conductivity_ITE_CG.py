@@ -236,6 +236,8 @@ class conductivity_ITE_CG(Conductivity):
                 print "Calculating the residual from SMRT..."
             self.print_calculation_progress_header()
             for i, grid_point in enumerate(self._grid_points):
+                if (np.abs(self._qpoints[i]) > self._pp._criteria).any():
+                    continue
                 self._collision.calculate_collision(grid_point)
                 #calculating scattering rate
                 self.get_total_rotation()
@@ -294,6 +296,8 @@ class conductivity_ITE_CG(Conductivity):
             self._z[self._isigma, :, self._itemp] = self._r[self._isigma, :, self._itemp] * out_reverse[..., np.newaxis]
         else:
             self._z[self._isigma, :, self._itemp] = self._r[self._isigma, :, self._itemp]
+
+        self._z[:, np.where(np.any(np.abs(self._qpoints) > self._pp._criteria, axis=1))] = 0
         zr0 = np.zeros(3, dtype="double")
         phono3c.phonon_3_multiply_dvector_gb3_dvector_gb3(zr0,
                                                         self._z_prev[self._isigma,:,self._itemp].copy(),
@@ -315,6 +319,10 @@ class conductivity_ITE_CG(Conductivity):
         self._p[self._isigma,:,self._itemp] = self._z[self._isigma,:,self._itemp] +\
                                               zr1_over_zr0 * self._p_prev[self._isigma,:,self._itemp]
 
+        self._p[:, np.where(np.any(np.abs(self._qpoints) > self._pp._criteria, axis=1))] = 0
+
+
+
     @total_time.set_main
     @total_time.timeit
     def run_at_sigma_and_temp(self): # sigma and temperature
@@ -330,6 +338,8 @@ class conductivity_ITE_CG(Conductivity):
                     print "######Perturbation flow for the next iterative step with tetrahedron method#######"
                 self.print_calculation_progress_header()
             for i, grid_point in enumerate(self._grid_points):
+                if (np.abs(self._qpoints[i]) > self._pp._criteria).any():
+                    continue
                 self._collision.calculate_collision(grid_point)
                 #calculating scattering rate
                 self.calculate_At_s_t_g(s, t, i) # sigma, temperature, grid
@@ -449,7 +459,16 @@ class conductivity_ITE_CG(Conductivity):
                                                                  np.intc(self._kpoint_operations[self._rot_mappings]).copy(),
                                                                  rec_lat.copy())
             kappa[:,t] = gouterm_temp * temp ** 2
+            self._F[s, np.where((np.abs(self._qpoints) > self._pp._criteria).any(axis=1)), t] = 0.
+            kappa[np.where((np.abs(self._qpoints) > self._pp._criteria).any(axis=1)), t] = 0.
+        # l = len(np.where((np.abs(self._qpoints) > self._pp._criteria).any(axis=1))[0])
+        # kappa *= np.prod(self._mesh) / np.double(np.prod(self._mesh) - l)
+
         kappa *= self._kappa_factor / np.prod(self._mesh)
+
+        #modified for my own interest
+
+
         kappa_max = kappa.sum(axis=(0,2)).max(axis=-1)
         rkappa = np.sum(np.abs(kappa - self._kappa[s]), axis=(0, 2)) # over qpoints and nbands
         for i in range(6):
@@ -472,5 +491,6 @@ class conductivity_ITE_CG(Conductivity):
                                                              np.intc(self._irr_index_mapping).copy(),
                                                              np.intc(self._kpoint_operations[self._rot_mappings]).copy(),
                                                              rec_lat.copy())
+        dkappa[np.where(np.any(np.abs(self._qpoints) > self._pp._criteria, axis=1))]=0
         dkappa = np.sum(np.abs(dkappa), axis=(0,1))
         return dkappa * self._temperatures[t] ** 2 * self._kappa_factor / np.prod(self._mesh)
